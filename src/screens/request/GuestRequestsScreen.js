@@ -83,7 +83,7 @@ const MyRequestCard = ({ item, onPress }) => {
       </View>
 
       <View style={styles.cardFooter}>
-        <Text style={styles.footerMeta}>📍 {item.province_city}</Text>
+        <Text style={styles.footerMeta}>📍 {item.district}</Text>
         <Text style={styles.footerDate}>
           {new Date(item.created_at).toLocaleDateString("vi-VN")}
         </Text>

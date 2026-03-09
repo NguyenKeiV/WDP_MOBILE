@@ -63,7 +63,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           label="Loại yêu cầu"
           value={category?.label || data.category}
         />
-        <Row icon="📍" label="Tỉnh/Thành phố" value={data.province_city} />
+        <Row icon="📍" label="Quận/Huyện" value={data.district} />
         <Row icon="👥" label="Số người" value={`${data.num_people} người`} />
         {priority && (
           <Row icon="⚡" label="Mức ưu tiên" value={priority.label} />
@@ -125,11 +125,8 @@ export default function RequestDetailScreen({ route, navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Đội cứu hộ</Text>
           <Row icon="🚒" label="Tên đội" value={data.assigned_team.name} />
-          <Row
-            icon="👨‍✈️"
-            label="Đội trưởng"
-            value={data.assigned_team.leader_name}
-          />
+          <Row icon="📍" label="Quận" value={data.assigned_team.district} />
+
           <TouchableOpacity
             onPress={() =>
               Linking.openURL(`tel:${data.assigned_team.phone_number}`)

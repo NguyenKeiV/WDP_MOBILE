@@ -110,7 +110,7 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
           <View style={styles.metaItem}>
             <Text style={styles.metaLabel}>Khu vực</Text>
-            <Text style={styles.metaValue}>📍 {mission.province_city}</Text>
+            <Text style={styles.metaValue}>📍 {mission.district}</Text>
           </View>
         </View>
       </View>
@@ -146,7 +146,7 @@ export default function MissionDetailScreen({ route, navigation }) {
           <Text style={styles.teamName}>{team.name}</Text>
           <Text style={styles.teamInfo}>👨‍✈️ Đội trưởng: {team.leader_name}</Text>
           <Text style={styles.teamInfo}>📞 {team.phone_number}</Text>
-          <Text style={styles.teamInfo}>📍 {team.province_city}</Text>
+          <Text style={styles.teamInfo}>📍 {team.district}</Text>
         </View>
       )}
 

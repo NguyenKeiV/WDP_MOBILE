@@ -16,7 +16,8 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { requestsApi } from "../../api/requests";
-import { COLORS, CATEGORIES, PRIORITIES, PROVINCES } from "../../constants";
+import { useAuth } from "../../context/AuthContext";
+import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
 
 const SelectModal = ({
   visible,
@@ -72,9 +73,10 @@ const SelectModal = ({
 );
 
 export default function CreateRequestScreen() {
+  const { user } = useAuth();
   const [form, setForm] = useState({
     category: "",
-    province_city: "",
+    district: "",
     phone_number: "",
     description: "",
     num_people: "1",
@@ -120,10 +122,12 @@ export default function CreateRequestScreen() {
 
   const validate = () => {
     if (!form.category) return "Vui lòng chọn loại yêu cầu";
-    if (!form.province_city) return "Vui lòng chọn tỉnh/thành phố";
+    if (!form.district) return "Vui lòng chọn quận/huyện";
     if (!form.phone_number.trim()) return "Vui lòng nhập số điện thoại";
     if (form.description.trim().length < 10)
       return "Mô tả phải có ít nhất 10 ký tự";
+    const numPeople = parseInt(form.num_people);
+    if (!numPeople || numPeople < 1) return "Số người phải ít nhất là 1";
     if (!gpsCoords) return "Chưa lấy được tọa độ GPS. Vui lòng thử lại.";
     return null;
   };
@@ -144,17 +148,22 @@ export default function CreateRequestScreen() {
         longitude: gpsCoords.longitude,
       });
 
-      // Lưu request ID vào local storage cho guest
-      const newId = res.data.id;
-      const existing = await AsyncStorage.getItem("guest_request_ids");
-      const ids = existing ? JSON.parse(existing) : [];
-      ids.unshift(newId);
-      await AsyncStorage.setItem("guest_request_ids", JSON.stringify(ids));
+      // Chỉ lưu local khi là guest
+      if (!user) {
+        const newId = res.data.id;
+        const existing = await AsyncStorage.getItem("guest_request_ids");
+        const ids = existing ? JSON.parse(existing) : [];
+        ids.unshift(newId);
+        await AsyncStorage.setItem(
+          "guest_request_ids",
+          JSON.stringify(ids.slice(0, 50)),
+        );
+      }
 
       setSuccess(true);
       setForm({
         category: "",
-        province_city: "",
+        district: "",
         phone_number: "",
         description: "",
         num_people: "1",
@@ -168,14 +177,14 @@ export default function CreateRequestScreen() {
       setSubmitting(false);
     }
   };
+
   if (success) {
     return (
       <View style={styles.successContainer}>
         <Text style={styles.successIcon}>✅</Text>
         <Text style={styles.successTitle}>Đã gửi yêu cầu!</Text>
         <Text style={styles.successSub}>
-          Yêu cầu cứu hộ của bạn đã được ghi nhận. Chúng tôi sẽ xử lý sớm nhất
-          có thể.
+          Yêu cầu của bạn đã được ghi nhận. Chúng tôi sẽ xử lý sớm nhất có thể.
         </Text>
         <TouchableOpacity
           style={styles.newBtn}
@@ -190,7 +199,6 @@ export default function CreateRequestScreen() {
     );
   }
 
-  const selectedCategory = CATEGORIES.find((c) => c.value === form.category);
   const selectedPriority = PRIORITIES.find((p) => p.value === form.priority);
 
   return (
@@ -208,51 +216,62 @@ export default function CreateRequestScreen() {
           Điền đầy đủ thông tin để chúng tôi hỗ trợ bạn nhanh nhất
         </Text>
 
+        {/* Loại yêu cầu — 2 nút inline */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
             Loại yêu cầu <Text style={styles.required}>*</Text>
           </Text>
-          <TouchableOpacity
-            style={styles.selectBtn}
-            onPress={() => setModal("category")}
-          >
-            <Text
-              style={[
-                styles.selectBtnText,
-                !selectedCategory && styles.placeholder,
-              ]}
-            >
-              {selectedCategory
-                ? selectedCategory.label
-                : "Chọn loại yêu cầu..."}
-            </Text>
-            <Text>▼</Text>
-          </TouchableOpacity>
+          <View style={styles.categoryRow}>
+            {CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.value}
+                style={[
+                  styles.categoryBtn,
+                  form.category === cat.value && {
+                    backgroundColor: cat.color,
+                    borderColor: cat.color,
+                  },
+                ]}
+                onPress={() => update("category", cat.value)}
+              >
+                <Text
+                  style={[
+                    styles.categoryBtnText,
+                    form.category === cat.value && { color: COLORS.white },
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
+        {/* Quận/Huyện */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
-            Tỉnh/Thành phố <Text style={styles.required}>*</Text>
+            Quận/Huyện <Text style={styles.required}>*</Text>
           </Text>
           <TouchableOpacity
             style={styles.selectBtn}
-            onPress={() => setModal("province")}
+            onPress={() => setModal("district")}
           >
             <Text
               style={[
                 styles.selectBtnText,
-                !form.province_city && styles.placeholder,
+                !form.district && styles.placeholder,
               ]}
             >
-              {form.province_city || "Chọn tỉnh/thành phố..."}
+              {form.district || "Chọn quận/huyện tại TP.HCM..."}
             </Text>
             <Text>▼</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Số điện thoại */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
-            Số điện thoại liên hệ <Text style={styles.required}>*</Text>
+            Số điện thoại <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
             style={styles.input}
@@ -263,13 +282,14 @@ export default function CreateRequestScreen() {
           />
         </View>
 
+        {/* Mô tả */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
             Mô tả tình huống <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
             style={[styles.input, styles.textarea]}
-            placeholder="Mô tả chi tiết tình huống, số người, tình trạng sức khỏe..."
+            placeholder="Mô tả chi tiết tình huống, số người, tình trạng..."
             value={form.description}
             onChangeText={(v) => update("description", v)}
             multiline
@@ -281,6 +301,7 @@ export default function CreateRequestScreen() {
           </Text>
         </View>
 
+        {/* Số người & Mức ưu tiên */}
         <View style={styles.row2}>
           <View style={[styles.field, { flex: 1 }]}>
             <Text style={styles.fieldLabel}>Số người</Text>
@@ -307,6 +328,7 @@ export default function CreateRequestScreen() {
           </View>
         </View>
 
+        {/* GPS */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
             Vị trí GPS <Text style={styles.required}>*</Text>
@@ -353,11 +375,11 @@ export default function CreateRequestScreen() {
       </ScrollView>
 
       <SelectModal
-        visible={modal === "category"}
-        title="Chọn loại yêu cầu"
-        options={CATEGORIES}
-        selected={form.category}
-        onSelect={(v) => update("category", v)}
+        visible={modal === "district"}
+        title="Chọn Quận/Huyện tại TP.HCM"
+        options={DISTRICTS}
+        selected={form.district}
+        onSelect={(v) => update("district", v)}
         onClose={() => setModal(null)}
       />
       <SelectModal
@@ -366,14 +388,6 @@ export default function CreateRequestScreen() {
         options={PRIORITIES}
         selected={form.priority}
         onSelect={(v) => update("priority", v)}
-        onClose={() => setModal(null)}
-      />
-      <SelectModal
-        visible={modal === "province"}
-        title="Chọn Tỉnh/Thành phố"
-        options={PROVINCES}
-        selected={form.province_city}
-        onSelect={(v) => update("province_city", v)}
         onClose={() => setModal(null)}
       />
     </KeyboardAvoidingView>
@@ -413,6 +427,17 @@ const styles = StyleSheet.create({
     textAlign: "right",
     marginTop: 4,
   },
+  categoryRow: { flexDirection: "row", gap: 10 },
+  categoryBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+  },
+  categoryBtnText: { fontSize: 14, fontWeight: "600", color: COLORS.text },
   selectBtn: {
     backgroundColor: COLORS.white,
     borderWidth: 1.5,

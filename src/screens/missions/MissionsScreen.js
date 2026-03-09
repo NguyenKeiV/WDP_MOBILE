@@ -46,7 +46,7 @@ const MissionCard = ({ item, onPress }) => {
       </Text>
 
       <View style={styles.cardInfo}>
-        <Text style={styles.infoItem}>📍 {item.province_city}</Text>
+        <Text style={styles.infoItem}>📍 {item.district}</Text>
         <Text style={styles.infoItem}>👥 {item.num_people} người</Text>
         <Text style={styles.infoItem}>📞 {item.phone_number}</Text>
       </View>
@@ -119,7 +119,7 @@ export default function MissionsScreen({ navigation }) {
       {team && (
         <View style={styles.teamInfo}>
           <Text style={styles.teamInfoText}>👨‍✈️ {team.leader_name}</Text>
-          <Text style={styles.teamInfoText}>📍 {team.province_city}</Text>
+          <Text style={styles.teamInfoText}>📍 {team.district}</Text>
           <View
             style={[
               styles.teamStatus,
