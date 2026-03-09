@@ -16,6 +16,7 @@ import MyRequestsScreen from "../screens/request/MyRequestsScreen";
 import GuestRequestsScreen from "../screens/request/GuestRequestsScreen";
 import MissionsScreen from "../screens/missions/MissionsScreen";
 import MissionDetailScreen from "../screens/missions/MissionDetailScreen";
+import MapPickerScreen from "../screens/request/MapPickerScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -26,7 +27,6 @@ function TabIcon({ icon, focused }) {
   );
 }
 
-// Tab cho user đã đăng nhập (role: user)
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -64,7 +64,6 @@ function MainTabs() {
   );
 }
 
-// Tab cho guest
 function GuestTabs() {
   return (
     <Tab.Navigator
@@ -110,7 +109,6 @@ function GuestTabs() {
   );
 }
 
-// Tab cho rescue team
 function RescueTeamTabs() {
   return (
     <Tab.Navigator
@@ -155,7 +153,6 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          // Đã đăng nhập — phân theo role
           user.role === "rescue_team" ? (
             <>
               <Stack.Screen name="RescueTeamTabs" component={RescueTeamTabs} />
@@ -163,6 +160,14 @@ export default function AppNavigator() {
                 name="MissionDetail"
                 component={MissionDetailScreen}
                 options={{ headerShown: true, title: "Chi tiết nhiệm vụ" }}
+              />
+              <Stack.Screen
+                name="MapPicker"
+                component={MapPickerScreen}
+                options={{
+                  headerShown: true,
+                  title: "Chọn vị trí trên bản đồ",
+                }}
               />
             </>
           ) : (
@@ -173,10 +178,17 @@ export default function AppNavigator() {
                 component={RequestDetailScreen}
                 options={{ headerShown: true, title: "Chi tiết yêu cầu" }}
               />
+              <Stack.Screen
+                name="MapPicker"
+                component={MapPickerScreen}
+                options={{
+                  headerShown: true,
+                  title: "Chọn vị trí trên bản đồ",
+                }}
+              />
             </>
           )
         ) : (
-          // Chưa đăng nhập
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
@@ -186,6 +198,11 @@ export default function AppNavigator() {
               name="RequestDetail"
               component={RequestDetailScreen}
               options={{ headerShown: true, title: "Chi tiết yêu cầu" }}
+            />
+            <Stack.Screen
+              name="MapPicker"
+              component={MapPickerScreen}
+              options={{ headerShown: true, title: "Chọn vị trí trên bản đồ" }}
             />
           </>
         )}

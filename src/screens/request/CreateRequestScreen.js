@@ -72,7 +72,7 @@ const SelectModal = ({
   </Modal>
 );
 
-export default function CreateRequestScreen() {
+export default function CreateRequestScreen({ navigation }) {
   const { user } = useAuth();
   const [form, setForm] = useState({
     category: "",
@@ -331,33 +331,53 @@ export default function CreateRequestScreen() {
         {/* GPS */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
-            Vị trí GPS <Text style={styles.required}>*</Text>
+            Vị trí <Text style={styles.required}>*</Text>
           </Text>
           <View style={styles.gpsBox}>
             {gpsCoords ? (
               <>
-                <Text style={styles.gpsSuccess}>✅ Đã lấy tọa độ</Text>
+                <Text style={styles.gpsSuccess}>✅ Đã có tọa độ</Text>
                 <Text style={styles.gpsCords}>
                   📍 {gpsCoords.latitude.toFixed(5)},{" "}
                   {gpsCoords.longitude.toFixed(5)}
                 </Text>
+                {gpsCoords.address ? (
+                  <Text style={styles.gpsAddress}>🏠 {gpsCoords.address}</Text>
+                ) : null}
               </>
             ) : (
               <Text style={styles.gpsWaiting}>📡 Chưa có tọa độ...</Text>
             )}
-            <TouchableOpacity
-              style={styles.gpsBtn}
-              onPress={getLocation}
-              disabled={gpsLoading}
-            >
-              {gpsLoading ? (
-                <ActivityIndicator color={COLORS.white} size="small" />
-              ) : (
-                <Text style={styles.gpsBtnText}>
-                  🔄 {gpsCoords ? "Cập nhật" : "Lấy vị trí"}
-                </Text>
-              )}
-            </TouchableOpacity>
+            <View style={styles.gpsBtnRow}>
+              <TouchableOpacity
+                style={[styles.gpsBtn, { flex: 1 }]}
+                onPress={getLocation}
+                disabled={gpsLoading}
+              >
+                {gpsLoading ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <Text style={styles.gpsBtnText}>🎯 Vị trí hiện tại</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.gpsBtn,
+                  { flex: 1, backgroundColor: COLORS.secondary },
+                ]}
+                onPress={() =>
+                  navigation.navigate("MapPicker", {
+                    initialLatitude: gpsCoords?.latitude,
+                    initialLongitude: gpsCoords?.longitude,
+                    onConfirm: ({ latitude, longitude, address }) => {
+                      setGpsCoords({ latitude, longitude, address });
+                    },
+                  })
+                }
+              >
+                <Text style={styles.gpsBtnText}>🗺️ Chọn trên map</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -473,6 +493,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
   },
+  gpsAddress: { fontSize: 12, color: COLORS.text, lineHeight: 18 },
+  gpsBtnRow: { flexDirection: "row", gap: 8, marginTop: 4 },
   gpsBtnText: { color: COLORS.white, fontWeight: "600", fontSize: 14 },
   submitBtn: {
     backgroundColor: COLORS.primary,

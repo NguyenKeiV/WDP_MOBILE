@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  FlatList,
+  Keyboard,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -21,21 +23,34 @@ const INITIAL_REGION = {
 
 async function reverseGeocode(latitude, longitude) {
   try {
-    const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (results && results.length > 0) {
-      const r = results[0];
-      const parts = [
-        r.streetNumber,
-        r.street,
-        r.subregion || r.district,
-        r.city,
-        r.region,
-      ].filter(Boolean);
-      return parts.join(", ");
-    }
-    return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=vi`,
+      { headers: { "User-Agent": "RescueApp/1.0" } },
+    );
+    const data = await res.json();
+    return (
+      data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
+    );
   } catch {
     return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  }
+}
+
+async function searchAddress(query) {
+  try {
+    const encoded = encodeURIComponent(query + ", Việt Nam");
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=5&accept-language=vi&countrycodes=vn`,
+      { headers: { "User-Agent": "RescueApp/1.0" } },
+    );
+    const data = await res.json();
+    return data.map((item) => ({
+      display_name: item.display_name,
+      latitude: parseFloat(item.lat),
+      longitude: parseFloat(item.lon),
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -50,6 +65,12 @@ export default function MapPickerScreen({ navigation, route }) {
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // Search
+  const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimeout = useRef(null);
+
   useEffect(() => {
     initLocation();
   }, []);
@@ -57,7 +78,6 @@ export default function MapPickerScreen({ navigation, route }) {
   const initLocation = async () => {
     setLoadingLocation(true);
     try {
-      // Nếu có vị trí ban đầu (edit mode)
       if (initialLatitude && initialLongitude) {
         const lat = parseFloat(initialLatitude);
         const lng = parseFloat(initialLongitude);
@@ -74,7 +94,6 @@ export default function MapPickerScreen({ navigation, route }) {
         return;
       }
 
-      // Lấy vị trí hiện tại
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setLoadingLocation(false);
@@ -94,7 +113,6 @@ export default function MapPickerScreen({ navigation, route }) {
       };
       setRegion(newRegion);
       setMarker({ latitude, longitude });
-
       const addr = await reverseGeocode(latitude, longitude);
       setAddress(addr);
     } catch (e) {
@@ -105,12 +123,15 @@ export default function MapPickerScreen({ navigation, route }) {
   };
 
   const handleMapPress = async (e) => {
+    Keyboard.dismiss();
+    setSearchResults([]);
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setMarker({ latitude, longitude });
     setLoadingAddress(true);
     try {
       const addr = await reverseGeocode(latitude, longitude);
       setAddress(addr);
+      setSearchText("");
     } finally {
       setLoadingAddress(false);
     }
@@ -139,10 +160,47 @@ export default function MapPickerScreen({ navigation, route }) {
       setLoadingAddress(true);
       const addr = await reverseGeocode(latitude, longitude);
       setAddress(addr);
+      setSearchText("");
+      setSearchResults([]);
       setLoadingAddress(false);
     } catch (e) {
       Alert.alert("Lỗi", "Không thể lấy vị trí hiện tại");
     }
+  };
+
+  const handleSearchChange = (text) => {
+    setSearchText(text);
+    setSearchResults([]);
+
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (text.trim().length < 3) return;
+
+    searchTimeout.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await searchAddress(text);
+        setSearchResults(results);
+      } finally {
+        setSearching(false);
+      }
+    }, 600);
+  };
+
+  const handleSelectResult = async (result) => {
+    Keyboard.dismiss();
+    setSearchResults([]);
+    setSearchText(result.display_name);
+
+    const { latitude, longitude } = result;
+    const newRegion = {
+      latitude,
+      longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+    setMarker({ latitude, longitude });
+    setAddress(result.display_name);
+    mapRef.current?.animateToRegion(newRegion, 500);
   };
 
   const handleConfirm = async () => {
@@ -192,12 +250,53 @@ export default function MapPickerScreen({ navigation, route }) {
         )}
       </MapView>
 
-      {/* Top instruction */}
-      <View style={styles.instructionBox}>
-        <Text style={styles.instructionText}>
-          📍 Bấm vào bản đồ để chọn vị trí cần cứu hộ
-        </Text>
+      {/* Search box */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm địa chỉ..."
+            value={searchText}
+            onChangeText={handleSearchChange}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {searching && (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          )}
+        </View>
+
+        {/* Search results dropdown */}
+        {searchResults.length > 0 && (
+          <FlatList
+            style={styles.searchResults}
+            data={searchResults}
+            keyExtractor={(_, i) => i.toString()}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.searchResultItem}
+                onPress={() => handleSelectResult(item)}
+              >
+                <Text style={styles.searchResultIcon}>📍</Text>
+                <Text style={styles.searchResultText} numberOfLines={2}>
+                  {item.display_name}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
       </View>
+
+      {/* Instruction */}
+      {searchResults.length === 0 && (
+        <View style={styles.instructionBox}>
+          <Text style={styles.instructionText}>
+            Bấm vào bản đồ hoặc tìm địa chỉ để chọn vị trí
+          </Text>
+        </View>
+      )}
 
       {/* My location button */}
       <TouchableOpacity style={styles.myLocationBtn} onPress={handleMyLocation}>
@@ -266,28 +365,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  loadingText: { fontSize: 14, color: COLORS.textLight },
+  loadingText: { fontSize: 14, color: "#888" },
   map: { flex: 1 },
-  instructionBox: {
+
+  searchContainer: {
     position: "absolute",
-    top: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 10,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.97)",
     borderRadius: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 5,
+    gap: 8,
+  },
+  searchIcon: { fontSize: 16 },
+  searchInput: { flex: 1, fontSize: 14, color: "#222" },
+  searchResults: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginTop: 4,
+    maxHeight: 200,
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 4,
   },
-  instructionText: {
-    fontSize: 13,
-    color: COLORS.text,
-    fontWeight: "600",
-    textAlign: "center",
+  searchResultItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+    gap: 8,
   },
+  searchResultIcon: { fontSize: 14, marginTop: 1 },
+  searchResultText: { fontSize: 13, color: "#333", flex: 1, lineHeight: 18 },
+
+  instructionBox: {
+    position: "absolute",
+    top: 72,
+    left: 16,
+    right: 16,
+    backgroundColor: "rgba(255,255,255,0.90)",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  instructionText: { fontSize: 12, color: "#555", textAlign: "center" },
+
   myLocationBtn: {
     position: "absolute",
     right: 16,
@@ -304,6 +440,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   myLocationIcon: { fontSize: 22 },
+
   bottomPanel: {
     position: "absolute",
     bottom: 0,
@@ -325,20 +462,15 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  coordLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.text,
-    width: 80,
-  },
-  coordText: { fontSize: 12, color: COLORS.textLight, flex: 1 },
+  coordLabel: { fontSize: 12, fontWeight: "700", color: "#333", width: 80 },
+  coordText: { fontSize: 12, color: "#666", flex: 1 },
   addressRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     marginBottom: 16,
   },
-  addressText: { fontSize: 13, color: COLORS.text, flex: 1, lineHeight: 18 },
+  addressText: { fontSize: 13, color: "#333", flex: 1, lineHeight: 18 },
   confirmBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: 14,
@@ -348,11 +480,8 @@ const styles = StyleSheet.create({
   },
   confirmBtnDisabled: { opacity: 0.6 },
   confirmBtnText: { color: COLORS.white, fontWeight: "700", fontSize: 15 },
-  cancelBtn: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  cancelBtnText: { fontSize: 14, color: COLORS.textLight },
+  cancelBtn: { alignItems: "center", paddingVertical: 8 },
+  cancelBtnText: { fontSize: 14, color: "#888" },
   noMarker: { alignItems: "center", paddingVertical: 16, marginBottom: 10 },
-  noMarkerText: { fontSize: 13, color: COLORS.textLight },
+  noMarkerText: { fontSize: 13, color: "#888" },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,14 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  Dimensions,
 } from "react-native";
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import * as Location from "expo-location";
 import { missionsApi } from "../../api/missions";
 import { COLORS, CATEGORIES } from "../../constants";
+
+const { width } = Dimensions.get("window");
 
 const PRIORITY_CONFIG = {
   urgent: { label: "🔴 Khẩn cấp", color: "#E53935", bg: "#FFEBEE" },
@@ -20,28 +25,96 @@ const PRIORITY_CONFIG = {
   low: { label: "🟢 Thấp", color: "#388E3C", bg: "#E8F5E9" },
 };
 
+async function fetchRoute(fromLat, fromLng, toLat, toLng) {
+  try {
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`,
+      { headers: { "User-Agent": "RescueApp/1.0" } },
+    );
+    const data = await res.json();
+    if (data.routes && data.routes.length > 0) {
+      const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({
+        latitude: lat,
+        longitude: lng,
+      }));
+      const distance = (data.routes[0].distance / 1000).toFixed(1);
+      const duration = Math.round(data.routes[0].duration / 60);
+      return { coords, distance, duration };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MissionDetailScreen({ route, navigation }) {
   const { mission, team } = route.params;
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [myLocation, setMyLocation] = useState(null);
+  const [routeCoords, setRouteCoords] = useState([]);
+  const [routeInfo, setRouteInfo] = useState(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [showMap, setShowMap] = useState(true);
+  const mapRef = useRef(null);
 
   const category = CATEGORIES.find((c) => c.value === mission.category);
   const priority = PRIORITY_CONFIG[mission.priority];
 
-  const handleCall = () => {
-    Linking.openURL(`tel:${mission.phone_number}`);
+  const targetLat = parseFloat(mission.latitude);
+  const targetLng = parseFloat(mission.longitude);
+  const hasGps = !isNaN(targetLat) && !isNaN(targetLng);
+
+  useEffect(() => {
+    if (hasGps) initRouting();
+  }, []);
+
+  const initRouting = async () => {
+    setLoadingRoute(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = loc.coords;
+      setMyLocation({ latitude, longitude });
+
+      const result = await fetchRoute(
+        latitude,
+        longitude,
+        targetLat,
+        targetLng,
+      );
+      if (result) {
+        setRouteCoords(result.coords);
+        setRouteInfo({ distance: result.distance, duration: result.duration });
+
+        // Fit map to show both points
+        setTimeout(() => {
+          mapRef.current?.fitToCoordinates(
+            [
+              { latitude, longitude },
+              { latitude: targetLat, longitude: targetLng },
+            ],
+            {
+              edgePadding: { top: 60, right: 40, bottom: 40, left: 40 },
+              animated: true,
+            },
+          );
+        }, 500);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingRoute(false);
+    }
   };
 
-  const handleOpenMap = () => {
-    const lat = parseFloat(mission.latitude);
-    const lng = parseFloat(mission.longitude);
-    if (lat && lng) {
-      const url =
-        Platform.OS === "ios"
-          ? `maps://?q=${lat},${lng}`
-          : `geo:${lat},${lng}?q=${lat},${lng}`;
-      Linking.openURL(url);
-    }
+  const handleCall = () => {
+    Linking.openURL(`tel:${mission.phone_number}`);
   };
 
   const handleComplete = () => {
@@ -99,6 +172,106 @@ export default function MissionDetailScreen({ route, navigation }) {
         </View>
       </View>
 
+      {/* Map inline */}
+      {hasGps && (
+        <View style={styles.card}>
+          <View style={styles.mapHeader}>
+            <Text style={styles.sectionTitle}>🗺️ Bản đồ chỉ đường</Text>
+            <TouchableOpacity onPress={() => setShowMap((v) => !v)}>
+              <Text style={styles.toggleMap}>
+                {showMap ? "Thu gọn" : "Mở rộng"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showMap && (
+            <>
+              {/* Route info */}
+              {routeInfo && (
+                <View style={styles.routeInfo}>
+                  <View style={styles.routeInfoItem}>
+                    <Text style={styles.routeInfoIcon}>📏</Text>
+                    <Text style={styles.routeInfoText}>
+                      {routeInfo.distance} km
+                    </Text>
+                  </View>
+                  <View style={styles.routeInfoDivider} />
+                  <View style={styles.routeInfoItem}>
+                    <Text style={styles.routeInfoIcon}>⏱️</Text>
+                    <Text style={styles.routeInfoText}>
+                      ~{routeInfo.duration} phút
+                    </Text>
+                  </View>
+                  <View style={styles.routeInfoDivider} />
+                  <View style={styles.routeInfoItem}>
+                    <Text style={styles.routeInfoIcon}>🚗</Text>
+                    <Text style={styles.routeInfoText}>Đường bộ</Text>
+                  </View>
+                </View>
+              )}
+
+              {loadingRoute && (
+                <View style={styles.mapLoading}>
+                  <ActivityIndicator color={COLORS.primary} />
+                  <Text style={styles.mapLoadingText}>
+                    Đang tải tuyến đường...
+                  </Text>
+                </View>
+              )}
+
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={{
+                  latitude: targetLat,
+                  longitude: targetLng,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                }}
+                showsUserLocation
+                showsMyLocationButton={false}
+              >
+                {/* Marker nạn nhân */}
+                <Marker
+                  coordinate={{ latitude: targetLat, longitude: targetLng }}
+                  title="🆘 Vị trí nạn nhân"
+                  description={mission.address || mission.district}
+                  pinColor="red"
+                />
+
+                {/* Marker vị trí đội */}
+                {myLocation && (
+                  <Marker
+                    coordinate={myLocation}
+                    title="🚒 Vị trí của bạn"
+                    pinColor="blue"
+                  />
+                )}
+
+                {/* Đường đi */}
+                {routeCoords.length > 0 && (
+                  <Polyline
+                    coordinates={routeCoords}
+                    strokeColor={COLORS.primary}
+                    strokeWidth={4}
+                    lineDashPattern={[0]}
+                  />
+                )}
+              </MapView>
+
+              <TouchableOpacity
+                style={styles.refreshRouteBtn}
+                onPress={initRouting}
+              >
+                <Text style={styles.refreshRouteBtnText}>
+                  🔄 Cập nhật tuyến đường
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+
       {/* Description */}
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>📝 Mô tả tình huống</Text>
@@ -125,17 +298,16 @@ export default function MissionDetailScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Location */}
-      {mission.latitude && mission.longitude && (
+      {/* Location text */}
+      {hasGps && (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>📍 Vị trí GPS</Text>
+          <Text style={styles.sectionTitle}>📍 Tọa độ GPS</Text>
           <Text style={styles.coordText}>
-            {parseFloat(mission.latitude).toFixed(5)},{" "}
-            {parseFloat(mission.longitude).toFixed(5)}
+            {targetLat.toFixed(6)}, {targetLng.toFixed(6)}
           </Text>
-          <TouchableOpacity style={styles.mapBtn} onPress={handleOpenMap}>
-            <Text style={styles.mapBtnText}>🗺️ Mở Google Maps</Text>
-          </TouchableOpacity>
+          {mission.address && (
+            <Text style={styles.addressText}>🏠 {mission.address}</Text>
+          )}
         </View>
       )}
 
@@ -144,7 +316,6 @@ export default function MissionDetailScreen({ route, navigation }) {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>🚒 Thông tin đội</Text>
           <Text style={styles.teamName}>{team.name}</Text>
-          <Text style={styles.teamInfo}>👨‍✈️ Đội trưởng: {team.leader_name}</Text>
           <Text style={styles.teamInfo}>📞 {team.phone_number}</Text>
           <Text style={styles.teamInfo}>📍 {team.district}</Text>
         </View>
@@ -222,6 +393,52 @@ const styles = StyleSheet.create({
   },
   priorityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   priorityText: { fontSize: 12, fontWeight: "700" },
+
+  mapHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  toggleMap: { fontSize: 13, color: COLORS.primary, fontWeight: "600" },
+  routeInfo: {
+    flexDirection: "row",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    alignItems: "center",
+    justifyContent: "space-around",
+  },
+  routeInfoItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  routeInfoIcon: { fontSize: 14 },
+  routeInfoText: { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  routeInfoDivider: { width: 1, height: 20, backgroundColor: "#DDD" },
+  mapLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  mapLoadingText: { fontSize: 13, color: COLORS.textLight },
+  map: {
+    width: "100%",
+    height: 280,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  refreshRouteBtn: {
+    marginTop: 10,
+    alignItems: "center",
+    padding: 8,
+  },
+  refreshRouteBtnText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+
   sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
@@ -246,15 +463,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.text,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-    marginBottom: 10,
+    marginBottom: 4,
   },
-  mapBtn: {
-    backgroundColor: "#1565C0",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  mapBtnText: { color: COLORS.white, fontWeight: "700", fontSize: 14 },
+  addressText: { fontSize: 13, color: COLORS.textLight, lineHeight: 18 },
   teamName: {
     fontSize: 15,
     fontWeight: "700",
