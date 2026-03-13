@@ -11,6 +11,8 @@ import {
   Platform,
   Dimensions,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
 import { missionsApi } from "../../api/missions";
@@ -48,6 +50,7 @@ async function fetchRoute(fromLat, fromLng, toLat, toLng) {
 }
 
 export default function MissionDetailScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { mission, team } = route.params;
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -147,215 +150,282 @@ export default function MissionDetailScreen({ route, navigation }) {
     );
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Status banner */}
-      <View style={styles.statusBanner}>
-        <Text style={styles.statusBannerText}>🚨 Đang thực hiện cứu hộ</Text>
-      </View>
+  const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
 
-      {/* Category & Priority */}
-      <View style={styles.card}>
-        <View style={styles.cardRow}>
-          <Text style={styles.categoryText}>
-            {category?.label || mission.category}
-          </Text>
-          {priority && (
-            <View
-              style={[styles.priorityBadge, { backgroundColor: priority.bg }]}
-            >
-              <Text style={[styles.priorityText, { color: priority.color }]}>
-                {priority.label}
+  return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, contentPadding]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Status banner */}
+        <View style={styles.statusBanner}>
+          <MaterialIcons name="local-shipping" size={24} color={COLORS.primary} />
+          <Text style={styles.statusBannerText}>Đang thực hiện cứu hộ</Text>
+        </View>
+
+        {/* Category & Priority */}
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <Text style={styles.categoryText}>
+              {category?.label || mission.category}
+            </Text>
+            {priority && (
+              <View
+                style={[styles.priorityBadge, { backgroundColor: priority.bg }]}
+              >
+                <Text style={[styles.priorityText, { color: priority.color }]}>
+                  {priority.label}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Map inline */}
+        {hasGps && (
+          <View style={styles.card}>
+            <View style={styles.mapHeader}>
+              <Text style={styles.sectionTitle}>Bản đồ chỉ đường</Text>
+              <TouchableOpacity onPress={() => setShowMap((v) => !v)}>
+                <Text style={styles.toggleMap}>
+                  {showMap ? "Thu gọn" : "Mở rộng"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {showMap && (
+              <>
+                {/* Route info */}
+                {routeInfo && (
+                  <View style={styles.routeInfo}>
+                    <View style={styles.routeInfoItem}>
+                      <Text style={styles.routeInfoIcon}>📏</Text>
+                      <Text style={styles.routeInfoText}>
+                        {routeInfo.distance} km
+                      </Text>
+                    </View>
+                    <View style={styles.routeInfoDivider} />
+                    <View style={styles.routeInfoItem}>
+                      <Text style={styles.routeInfoIcon}>⏱️</Text>
+                      <Text style={styles.routeInfoText}>
+                        ~{routeInfo.duration} phút
+                      </Text>
+                    </View>
+                    <View style={styles.routeInfoDivider} />
+                    <View style={styles.routeInfoItem}>
+                      <Text style={styles.routeInfoIcon}>🚗</Text>
+                      <Text style={styles.routeInfoText}>Đường bộ</Text>
+                    </View>
+                  </View>
+                )}
+
+                {loadingRoute && (
+                  <View style={styles.mapLoading}>
+                    <ActivityIndicator color={COLORS.primary} />
+                    <Text style={styles.mapLoadingText}>
+                      Đang tải tuyến đường...
+                    </Text>
+                  </View>
+                )}
+
+                <MapView
+                  ref={mapRef}
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: targetLat,
+                    longitude: targetLng,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                  }}
+                  showsUserLocation
+                  showsMyLocationButton={false}
+                >
+                  {/* Marker nạn nhân */}
+                  <Marker
+                    coordinate={{ latitude: targetLat, longitude: targetLng }}
+                    title="Vị trí nạn nhân"
+                    description={mission.address || mission.district}
+                    pinColor="red"
+                  />
+
+                  {/* Marker vị trí đội */}
+                  {myLocation && (
+                    <Marker
+                      coordinate={myLocation}
+                      title="Vị trí của bạn"
+                      pinColor="blue"
+                    />
+                  )}
+
+                  {/* Đường đi */}
+                  {routeCoords.length > 0 && (
+                    <Polyline
+                      coordinates={routeCoords}
+                      strokeColor={COLORS.primary}
+                      strokeWidth={4}
+                      lineDashPattern={[0]}
+                    />
+                  )}
+                </MapView>
+
+                <TouchableOpacity
+                  style={styles.refreshRouteBtn}
+                  onPress={initRouting}
+                >
+                  <Text style={styles.refreshRouteBtnText}>
+                    🔄 Cập nhật tuyến đường
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Description */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="description" size={18} color={COLORS.textLight} />
+            <Text style={styles.sectionTitle}>Mô tả tình huống</Text>
+          </View>
+          <Text style={styles.descText}>{mission.description}</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <MaterialIcons name="groups" size={16} color={COLORS.textLight} />
+              <Text style={styles.metaValue}>{mission.num_people} người</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <MaterialIcons
+                name="location-on"
+                size={16}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.metaValue}>{mission.district}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Contact */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="call" size={18} color={COLORS.textLight} />
+            <Text style={styles.sectionTitle}>Liên hệ người cần cứu hộ</Text>
+          </View>
+          <TouchableOpacity style={styles.contactBtn} onPress={handleCall}>
+            <MaterialIcons name="call" size={22} color={COLORS.white} />
+            <Text style={styles.contactBtnText}>Gọi {mission.phone_number}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Location text */}
+        {hasGps && (
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons
+                name="location-on"
+                size={18}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.sectionTitle}>Vị trí GPS</Text>
+            </View>
+            <Text style={styles.coordText}>
+              {targetLat.toFixed(6)}, {targetLng.toFixed(6)}
+            </Text>
+            {mission.address && (
+              <Text style={styles.addressText}>{mission.address}</Text>
+            )}
+          </View>
+        )}
+
+        {/* Team info */}
+        {team && (
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons name="groups" size={18} color={COLORS.textLight} />
+              <Text style={styles.sectionTitle}>Thông tin đội</Text>
+            </View>
+            <Text style={styles.teamName}>{team.name}</Text>
+            <View style={styles.teamInfoRow}>
+              <MaterialIcons name="person" size={16} color={COLORS.textLight} />
+              <Text style={styles.teamInfo}>Đội trưởng: {team.leader_name}</Text>
+            </View>
+            <View style={styles.teamInfoRow}>
+              <MaterialIcons name="call" size={16} color={COLORS.textLight} />
+              <Text style={styles.teamInfo}>{team.phone_number}</Text>
+            </View>
+            <View style={styles.teamInfoRow}>
+              <MaterialIcons
+                name="location-on"
+                size={16}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.teamInfo}>{team.district}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Time */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="schedule" size={18} color={COLORS.textLight} />
+            <Text style={styles.sectionTitle}>Thời gian</Text>
+          </View>
+          <View style={styles.timeRow}>
+            <MaterialIcons name="event" size={16} color={COLORS.textLight} />
+            <Text style={styles.timeText}>
+              Tạo lúc: {new Date(mission.created_at).toLocaleString("vi-VN")}
+            </Text>
+          </View>
+          {mission.assigned_at && (
+            <View style={styles.timeRow}>
+              <MaterialIcons
+                name="assignment"
+                size={16}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.timeText}>
+                Phân công:{" "}
+                {new Date(mission.assigned_at).toLocaleString("vi-VN")}
               </Text>
             </View>
           )}
         </View>
-      </View>
 
-      {/* Map inline */}
-      {hasGps && (
-        <View style={styles.card}>
-          <View style={styles.mapHeader}>
-            <Text style={styles.sectionTitle}>🗺️ Bản đồ chỉ đường</Text>
-            <TouchableOpacity onPress={() => setShowMap((v) => !v)}>
-              <Text style={styles.toggleMap}>
-                {showMap ? "Thu gọn" : "Mở rộng"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {showMap && (
-            <>
-              {/* Route info */}
-              {routeInfo && (
-                <View style={styles.routeInfo}>
-                  <View style={styles.routeInfoItem}>
-                    <Text style={styles.routeInfoIcon}>📏</Text>
-                    <Text style={styles.routeInfoText}>
-                      {routeInfo.distance} km
-                    </Text>
-                  </View>
-                  <View style={styles.routeInfoDivider} />
-                  <View style={styles.routeInfoItem}>
-                    <Text style={styles.routeInfoIcon}>⏱️</Text>
-                    <Text style={styles.routeInfoText}>
-                      ~{routeInfo.duration} phút
-                    </Text>
-                  </View>
-                  <View style={styles.routeInfoDivider} />
-                  <View style={styles.routeInfoItem}>
-                    <Text style={styles.routeInfoIcon}>🚗</Text>
-                    <Text style={styles.routeInfoText}>Đường bộ</Text>
-                  </View>
-                </View>
-              )}
-
-              {loadingRoute && (
-                <View style={styles.mapLoading}>
-                  <ActivityIndicator color={COLORS.primary} />
-                  <Text style={styles.mapLoadingText}>
-                    Đang tải tuyến đường...
-                  </Text>
-                </View>
-              )}
-
-              <MapView
-                ref={mapRef}
-                style={styles.map}
-                initialRegion={{
-                  latitude: targetLat,
-                  longitude: targetLng,
-                  latitudeDelta: 0.05,
-                  longitudeDelta: 0.05,
-                }}
-                showsUserLocation
-                showsMyLocationButton={false}
-              >
-                {/* Marker nạn nhân */}
-                <Marker
-                  coordinate={{ latitude: targetLat, longitude: targetLng }}
-                  title="🆘 Vị trí nạn nhân"
-                  description={mission.address || mission.district}
-                  pinColor="red"
+        {/* Complete button */}
+        {!completed && (
+          <TouchableOpacity
+            style={[styles.completeBtn, completing && { opacity: 0.7 }]}
+            onPress={handleComplete}
+            disabled={completing}
+          >
+            {completing ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <>
+                <MaterialIcons
+                  name="check-circle"
+                  size={24}
+                  color={COLORS.white}
                 />
-
-                {/* Marker vị trí đội */}
-                {myLocation && (
-                  <Marker
-                    coordinate={myLocation}
-                    title="🚒 Vị trí của bạn"
-                    pinColor="blue"
-                  />
-                )}
-
-                {/* Đường đi */}
-                {routeCoords.length > 0 && (
-                  <Polyline
-                    coordinates={routeCoords}
-                    strokeColor={COLORS.primary}
-                    strokeWidth={4}
-                    lineDashPattern={[0]}
-                  />
-                )}
-              </MapView>
-
-              <TouchableOpacity
-                style={styles.refreshRouteBtn}
-                onPress={initRouting}
-              >
-                <Text style={styles.refreshRouteBtnText}>
-                  🔄 Cập nhật tuyến đường
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* Description */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>📝 Mô tả tình huống</Text>
-        <Text style={styles.descText}>{mission.description}</Text>
-        <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
-            <Text style={styles.metaLabel}>Số người</Text>
-            <Text style={styles.metaValue}>👥 {mission.num_people} người</Text>
-          </View>
-          <View style={styles.metaItem}>
-            <Text style={styles.metaLabel}>Khu vực</Text>
-            <Text style={styles.metaValue}>📍 {mission.district}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Contact */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>📞 Liên hệ người cần cứu hộ</Text>
-        <TouchableOpacity style={styles.contactBtn} onPress={handleCall}>
-          <Text style={styles.contactBtnText}>
-            📞 Gọi {mission.phone_number}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Location text */}
-      {hasGps && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>📍 Tọa độ GPS</Text>
-          <Text style={styles.coordText}>
-            {targetLat.toFixed(6)}, {targetLng.toFixed(6)}
-          </Text>
-          {mission.address && (
-            <Text style={styles.addressText}>🏠 {mission.address}</Text>
-          )}
-        </View>
-      )}
-
-      {/* Team info */}
-      {team && (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>🚒 Thông tin đội</Text>
-          <Text style={styles.teamName}>{team.name}</Text>
-          <Text style={styles.teamInfo}>📞 {team.phone_number}</Text>
-          <Text style={styles.teamInfo}>📍 {team.district}</Text>
-        </View>
-      )}
-
-      {/* Time */}
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>🕐 Thời gian</Text>
-        <Text style={styles.timeText}>
-          Tạo lúc: {new Date(mission.created_at).toLocaleString("vi-VN")}
-        </Text>
-        {mission.assigned_at && (
-          <Text style={styles.timeText}>
-            Phân công lúc:{" "}
-            {new Date(mission.assigned_at).toLocaleString("vi-VN")}
-          </Text>
+                <Text style={styles.completeBtnText}>Hoàn thành nhiệm vụ</Text>
+              </>
+            )}
+          </TouchableOpacity>
         )}
-      </View>
 
-      {/* Complete button */}
-      {!completed && (
-        <TouchableOpacity
-          style={[styles.completeBtn, completing && { opacity: 0.7 }]}
-          onPress={handleComplete}
-          disabled={completing}
-        >
-          {completing ? (
-            <ActivityIndicator color={COLORS.white} />
-          ) : (
-            <Text style={styles.completeBtnText}>✔️ Hoàn thành nhiệm vụ</Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {completed && (
-        <View style={styles.completedBanner}>
-          <Text style={styles.completedText}>✅ Nhiệm vụ đã hoàn thành</Text>
-        </View>
-      )}
-    </ScrollView>
+        {completed && (
+          <View style={styles.completedBanner}>
+            <MaterialIcons
+              name="check-circle"
+              size={32}
+              color="#388E3C"
+            />
+            <Text style={styles.completedText}>Nhiệm vụ đã hoàn thành</Text>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -363,13 +433,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.grayLight },
   content: { padding: 16, paddingBottom: 40 },
   statusBanner: {
-    backgroundColor: "#FFEBEE",
-    borderRadius: 12,
-    padding: 12,
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "30",
   },
-  statusBannerText: { color: COLORS.primary, fontWeight: "700", fontSize: 15 },
+  statusBannerText: { color: COLORS.primary, fontWeight: "700", fontSize: 16 },
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 14,
@@ -439,18 +514,27 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: COLORS.textLight,
-    marginBottom: 8,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  descText: { fontSize: 14, color: COLORS.text, lineHeight: 22 },
-  metaRow: { flexDirection: "row", gap: 16, marginTop: 12 },
-  metaItem: { flex: 1 },
-  metaLabel: { fontSize: 11, color: COLORS.textLight, marginBottom: 2 },
+  descText: { fontSize: 14, color: COLORS.text, lineHeight: 22, marginBottom: 12 },
+  metaRow: { flexDirection: "row", gap: 24 },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  metaLabel: { fontSize: 12, color: COLORS.textLight },
   metaValue: { fontSize: 13, color: COLORS.text, fontWeight: "600" },
   contactBtn: {
     backgroundColor: COLORS.primary,
@@ -472,22 +556,42 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     marginBottom: 6,
   },
-  teamInfo: { fontSize: 13, color: COLORS.text, marginBottom: 3 },
-  timeText: { fontSize: 13, color: COLORS.text, marginBottom: 4 },
+  teamInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  teamInfo: { fontSize: 13, color: COLORS.text },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  timeText: { fontSize: 13, color: COLORS.text },
   completeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
     backgroundColor: "#388E3C",
     borderRadius: 14,
     padding: 18,
-    alignItems: "center",
     marginTop: 8,
   },
   completeBtnText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
   completedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
     backgroundColor: "#E8F5E9",
     borderRadius: 14,
     padding: 18,
-    alignItems: "center",
     marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#388E3C30",
   },
   completedText: { color: "#388E3C", fontSize: 17, fontWeight: "800" },
 });

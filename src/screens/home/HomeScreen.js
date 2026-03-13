@@ -8,33 +8,37 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+
 import { useAuth } from "../../context/AuthContext";
 import { requestsApi } from "../../api/requests";
 import { COLORS, STATUS_CONFIG, CATEGORIES } from "../../constants";
 
 const CategoryFilter = ({ selected, onSelect }) => {
-  const all = [{ value: "", label: "🔍 Tất cả" }, ...CATEGORIES];
+  const all = [{ value: "", label: "Tất cả" }, ...CATEGORIES];
   return (
     <View style={styles.filterRow}>
-      {all.map((c) => (
-        <TouchableOpacity
-          key={c.value}
-          style={[
-            styles.filterChip,
-            selected === c.value && styles.filterChipActive,
-          ]}
-          onPress={() => onSelect(c.value)}
-        >
-          <Text
-            style={[
-              styles.filterChipText,
-              selected === c.value && styles.filterChipTextActive,
-            ]}
+      {all.map((c) => {
+        const isActive = selected === c.value;
+        return (
+          <TouchableOpacity
+            key={c.value}
+            style={[styles.filterChip, isActive && styles.filterChipActive]}
+            onPress={() => onSelect(c.value)}
+            activeOpacity={0.8}
           >
-            {c.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+            <Text
+              style={[
+                styles.filterChipText,
+                isActive && styles.filterChipTextActive,
+              ]}
+            >
+              {c.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 };
@@ -82,6 +86,7 @@ const RequestCard = ({ item, onPress }) => {
 
 export default function HomeScreen({ navigation }) {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,10 +148,11 @@ export default function HomeScreen({ navigation }) {
     <View>
       <View style={styles.topBar}>
         <View>
-          <Text style={styles.greeting}>Xin chào, {user?.username} 👋</Text>
+          <Text style={styles.greeting}>Xin chào, {user?.username}</Text>
           <Text style={styles.greetingSub}>Hệ thống cứu hộ cộng đồng</Text>
         </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
+        <TouchableOpacity onPress={logout} style={styles.logoutBtn} activeOpacity={0.8}>
+          <MaterialIcons name="exit-to-app" size={18} color={COLORS.primary} />
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
@@ -185,17 +191,22 @@ export default function HomeScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={{ marginTop: 12, color: COLORS.textLight }}>
-          Đang tải...
-        </Text>
-      </View>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={{ marginTop: 12, color: COLORS.textLight }}>
+            Đang tải...
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
+  const paddingTop = Math.max(insets.top, 16);
+  const paddingBottom = (insets.bottom || 24) + 24;
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <FlatList
         data={requests}
         keyExtractor={(item) => item.id}
@@ -208,7 +219,13 @@ export default function HomeScreen({ navigation }) {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📭</Text>
+            <View style={styles.emptyIconCircle}>
+              <MaterialIcons
+                name="menu-book"
+                size={48}
+                color={COLORS.textLight}
+              />
+            </View>
             <Text style={styles.emptyText}>Không có yêu cầu nào</Text>
           </View>
         }
@@ -226,17 +243,22 @@ export default function HomeScreen({ navigation }) {
         }
         onEndReached={onLoadMore}
         onEndReachedThreshold={0.3}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingTop, paddingBottom }]}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.grayLight },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listContent: { padding: 16, paddingTop: 48 },
+  listContent: {
+    paddingHorizontal: 16,
+    maxWidth: 448,
+    alignSelf: "center",
+    width: "100%",
+  },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -246,12 +268,15 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 18, fontWeight: "700", color: COLORS.black },
   greetingSub: { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
   logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     backgroundColor: COLORS.primaryLight,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
-  logoutText: { color: COLORS.primary, fontSize: 13, fontWeight: "600" },
+  logoutText: { color: COLORS.primary, fontSize: 13, fontWeight: "700" },
   statsRow: { flexDirection: "row", gap: 8, marginBottom: 20 },
   statCard: { flex: 1, borderRadius: 12, padding: 10, alignItems: "center" },
   statNum: { fontSize: 20, fontWeight: "800", color: COLORS.primary },
@@ -328,6 +353,14 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 11, color: COLORS.gray },
   cardTime: { fontSize: 11, color: COLORS.gray, marginLeft: "auto" },
   empty: { alignItems: "center", paddingVertical: 40 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "hsl(210, 5%, 96%)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
   emptyText: { fontSize: 15, color: COLORS.textLight },
 });
