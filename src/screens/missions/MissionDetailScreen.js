@@ -10,12 +10,17 @@ import {
   Linking,
   Platform,
   Dimensions,
+  Modal,
+  TextInput,
+  Image,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import { missionsApi } from "../../api/missions";
+import { uploadImage } from "../../api/upload";
 import { COLORS, CATEGORIES } from "../../constants";
 
 const { width } = Dimensions.get("window");
@@ -54,6 +59,9 @@ export default function MissionDetailScreen({ route, navigation }) {
   const { mission, team } = route.params;
   const [completing, setCompleting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completionNotes, setCompletionNotes] = useState("");
+  const [completionMediaUris, setCompletionMediaUris] = useState([]);
   const [myLocation, setMyLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -120,35 +128,63 @@ export default function MissionDetailScreen({ route, navigation }) {
     Linking.openURL(`tel:${mission.phone_number}`);
   };
 
-  const handleComplete = () => {
-    Alert.alert(
-      "✔️ Hoàn thành nhiệm vụ",
-      "Xác nhận đội đã hoàn thành nhiệm vụ cứu hộ này?",
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xác nhận hoàn thành",
-          style: "default",
-          onPress: async () => {
-            setCompleting(true);
-            try {
-              await missionsApi.complete(mission.id);
-              setCompleted(true);
-              Alert.alert(
-                "✅ Thành công",
-                "Nhiệm vụ đã được hoàn thành. Đội của bạn đã trở về trạng thái sẵn sàng.",
-                [{ text: "OK", onPress: () => navigation.goBack() }],
-              );
-            } catch (e) {
-              Alert.alert("Lỗi", e.message);
-            } finally {
-              setCompleting(false);
-            }
-          },
-        },
-      ],
-    );
+  const openCompleteModal = () => setShowCompleteModal(true);
+
+  const pickCompletionImages = async () => {
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh để đính kèm ảnh báo cáo.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setCompletionMediaUris((prev) =>
+        [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+      );
+    }
   };
+
+  const removeCompletionImage = (index) => {
+    setCompletionMediaUris((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmitComplete = async () => {
+    setCompleting(true);
+    try {
+      let completion_media_urls = [];
+      if (completionMediaUris.length > 0) {
+        const urls = await Promise.all(
+          completionMediaUris.map((uri) => uploadImage(uri)),
+        );
+        completion_media_urls = urls.filter(Boolean);
+      }
+      await missionsApi.complete(
+        mission.id,
+        completionNotes.trim(),
+        completion_media_urls,
+      );
+      setShowCompleteModal(false);
+      setCompletionNotes("");
+      setCompletionMediaUris([]);
+      setCompleted(true);
+      Alert.alert(
+        "✅ Thành công",
+        "Nhiệm vụ đã được hoàn thành. Đội của bạn đã trở về trạng thái sẵn sàng.",
+        [{ text: "OK", onPress: () => navigation.goBack() }],
+      );
+    } catch (e) {
+      Alert.alert("Lỗi", e.message);
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const handleComplete = () => openCompleteModal();
 
   const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
 
@@ -424,6 +460,83 @@ export default function MissionDetailScreen({ route, navigation }) {
             <Text style={styles.completedText}>Nhiệm vụ đã hoàn thành</Text>
           </View>
         )}
+
+        {/* Modal báo cáo hoàn thành: ghi chú + ảnh */}
+        <Modal
+          visible={showCompleteModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => !completing && setShowCompleteModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCompleteBox}>
+              <Text style={styles.modalCompleteTitle}>Báo cáo hoàn thành</Text>
+              <Text style={styles.modalCompleteSub}>
+                Ghi chú và ảnh sẽ gửi cho điều phối viên
+              </Text>
+              <TextInput
+                style={styles.modalCompleteInput}
+                placeholder="Ghi chú (vd: Đã cứu 5 người, đưa về điểm an toàn)"
+                value={completionNotes}
+                onChangeText={setCompletionNotes}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={styles.modalAddPhotoBtn}
+                onPress={pickCompletionImages}
+              >
+                <MaterialIcons name="add-photo-alternate" size={22} color={COLORS.primary} />
+                <Text style={styles.modalAddPhotoText}>Chọn ảnh báo cáo</Text>
+                {completionMediaUris.length > 0 && (
+                  <Text style={styles.modalPhotoCount}>
+                    {completionMediaUris.length} ảnh
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {completionMediaUris.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.modalPhotoRow}
+                >
+                  {completionMediaUris.map((uri, index) => (
+                    <View key={index} style={styles.modalPhotoWrap}>
+                      <Image source={{ uri }} style={styles.modalPhoto} />
+                      <TouchableOpacity
+                        style={styles.modalPhotoRemove}
+                        onPress={() => removeCompletionImage(index)}
+                      >
+                        <MaterialIcons name="close" size={14} color={COLORS.white} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              <View style={styles.modalCompleteActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowCompleteModal(false)}
+                  disabled={completing}
+                >
+                  <Text style={styles.modalCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, completing && { opacity: 0.7 }]}
+                  onPress={handleSubmitComplete}
+                  disabled={completing}
+                >
+                  {completing ? (
+                    <ActivityIndicator color={COLORS.white} size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Gửi báo cáo</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -581,6 +694,84 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   completeBtnText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCompleteBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  modalCompleteTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  modalCompleteSub: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginBottom: 14,
+  },
+  modalCompleteInput: {
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 72,
+    marginBottom: 12,
+  },
+  modalAddPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  modalAddPhotoText: { fontSize: 14, color: COLORS.primary, fontWeight: "600" },
+  modalPhotoCount: { fontSize: 12, color: COLORS.textLight },
+  modalPhotoRow: { marginBottom: 16, maxHeight: 76 },
+  modalPhotoWrap: { marginRight: 8, position: "relative" },
+  modalPhoto: { width: 64, height: 64, borderRadius: 8 },
+  modalPhotoRemove: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.danger,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCompleteActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 8,
+  },
+  modalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: COLORS.grayLight,
+  },
+  modalCancelText: { fontSize: 14, color: COLORS.text, fontWeight: "600" },
+  modalSubmitBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+  },
+  modalSubmitText: { fontSize: 14, color: COLORS.white, fontWeight: "700" },
   completedBanner: {
     flexDirection: "row",
     alignItems: "center",

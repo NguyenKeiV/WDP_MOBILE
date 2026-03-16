@@ -13,11 +13,14 @@ import {
   Platform,
   Modal,
   FlatList,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 import { requestsApi } from "../../api/requests";
+import { uploadImage } from "../../api/upload";
 import { useAuth } from "../../context/AuthContext";
 import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
 
@@ -101,6 +104,7 @@ export default function CreateRequestScreen({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const [modal, setModal] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [mediaUris, setMediaUris] = useState([]);
 
   const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -145,6 +149,29 @@ export default function CreateRequestScreen({ navigation }) {
     return null;
   };
 
+  const pickImages = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh để đính kèm ảnh.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setMediaUris((prev) => [
+        ...prev,
+        ...result.assets.map((a) => a.uri),
+      ].slice(0, 10));
+    }
+  };
+
+  const removeMediaUri = (index) => {
+    setMediaUris((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     const err = validate();
     if (err) {
@@ -153,12 +180,20 @@ export default function CreateRequestScreen({ navigation }) {
     }
     setSubmitting(true);
     try {
+      let media_urls = [];
+      if (mediaUris.length > 0) {
+        const urls = await Promise.all(
+          mediaUris.map((uri) => uploadImage(uri)),
+        );
+        media_urls = urls.filter(Boolean);
+      }
       const res = await requestsApi.create({
         ...form,
         num_people: parseInt(form.num_people) || 1,
         location_type: "gps",
         latitude: gpsCoords.latitude,
         longitude: gpsCoords.longitude,
+        media_urls,
       });
 
       // Chỉ lưu local khi là guest
@@ -184,6 +219,7 @@ export default function CreateRequestScreen({ navigation }) {
         location_type: "gps",
       });
       setGpsCoords(null);
+      setMediaUris([]);
     } catch (e) {
       Alert.alert("Gửi thất bại", e.message);
     } finally {
@@ -321,6 +357,37 @@ export default function CreateRequestScreen({ navigation }) {
           <Text style={styles.charCount}>
             {form.description.length} ký tự (tối thiểu 10)
           </Text>
+        </View>
+
+        {/* Đính kèm ảnh (tùy chọn) */}
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>Đính kèm ảnh (tùy chọn)</Text>
+          <TouchableOpacity
+            style={styles.addPhotoBtn}
+            onPress={pickImages}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="add-photo-alternate" size={24} color={COLORS.primary} />
+            <Text style={styles.addPhotoText}>Chọn ảnh từ thư viện</Text>
+            {mediaUris.length > 0 && (
+              <Text style={styles.addPhotoCount}>{mediaUris.length} ảnh</Text>
+            )}
+          </TouchableOpacity>
+          {mediaUris.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaPreviewRow}>
+              {mediaUris.map((uri, index) => (
+                <View key={index} style={styles.mediaPreviewWrap}>
+                  <Image source={{ uri }} style={styles.mediaPreview} />
+                  <TouchableOpacity
+                    style={styles.mediaRemove}
+                    onPress={() => removeMediaUri(index)}
+                  >
+                    <MaterialIcons name="close" size={16} color={COLORS.white} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* Số người & Mức ưu tiên */}
@@ -628,6 +695,33 @@ const styles = StyleSheet.create({
   },
   selectBtnText: { fontSize: 15, color: COLORS.text },
   placeholder: { color: "#BDBDBD" },
+  addPhotoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+  },
+  addPhotoText: { fontSize: 14, color: COLORS.primary, fontWeight: "600" },
+  addPhotoCount: { fontSize: 12, color: COLORS.textLight, marginLeft: 4 },
+  mediaPreviewRow: { marginTop: 8, maxHeight: 88 },
+  mediaPreviewWrap: { marginRight: 8, position: "relative" },
+  mediaPreview: { width: 72, height: 72, borderRadius: 8 },
+  mediaRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.danger,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   row2: { flexDirection: "row", gap: 10 },
   gpsCords: {
     fontSize: 12,

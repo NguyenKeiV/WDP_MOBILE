@@ -17,6 +17,8 @@ import MyRequestsScreen from "../screens/request/MyRequestsScreen";
 import GuestRequestsScreen from "../screens/request/GuestRequestsScreen";
 import MissionsScreen from "../screens/missions/MissionsScreen";
 import MissionDetailScreen from "../screens/missions/MissionDetailScreen";
+import InventoryScreen from "../screens/rescue/InventoryScreen";
+import VehicleReturnScreen from "../screens/rescue/VehicleReturnScreen";
 import MapPickerScreen from "../screens/request/MapPickerScreen";
 
 const Stack = createNativeStackNavigator();
@@ -193,6 +195,26 @@ function RescueTeamTabs() {
           tabBarLabel: "Nhiệm vụ",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="assignment" focused={focused} label="Nhiệm vụ" />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{
+          tabBarLabel: "Kiểm kê",
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="inventory-2" focused={focused} label="Kiểm kê" />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="VehicleReturn"
+        component={VehicleReturnScreen}
+        options={{
+          tabBarLabel: "Thu hồi xe",
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="local-shipping" focused={focused} label="Thu hồi xe" />
           ),
         }}
       />

@@ -18,4 +18,10 @@ export const requestsApi = {
 
   // Thống kê
   getStats: () => apiClient.get("/rescue-requests/stats/summary"),
+
+  // Gắn yêu cầu guest vào tài khoản vừa đăng nhập (sau khi login)
+  linkToMe: (requestIds) =>
+    apiClient.post("/rescue-requests/link-to-me", {
+      request_ids: Array.isArray(requestIds) ? requestIds : [],
+    }),
 };
