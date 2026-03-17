@@ -1,6 +1,17 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApi } from "../api/auth";
+import {
+  registerForPushNotifications,
+  savePushTokenToServer,
+} from "../utils/pushNotification";
+import * as Notifications from "expo-notifications";
 
 const AuthContext = createContext(null);
 
@@ -8,6 +19,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -16,7 +29,12 @@ export const AuthProvider = ({ children }) => {
         const savedUser = await AsyncStorage.getItem("auth_user");
         if (savedToken && savedUser) {
           setToken(savedToken);
-          setUser(JSON.parse(savedUser));
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          // Đăng ký push token lại khi khởi động app
+          if (parsedUser.role === "rescue_team") {
+            registerAndSavePushToken();
+          }
         }
       } catch (e) {
         await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
@@ -25,7 +43,37 @@ export const AuthProvider = ({ children }) => {
       }
     };
     bootstrap();
+
+    // Lắng nghe notification khi app đang mở
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        console.log("📬 Notification received:", notification);
+      });
+
+    // Lắng nghe khi user bấm vào notification
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data;
+        console.log("👆 Notification tapped:", data);
+      });
+
+    return () => {
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
   }, []);
+
+  const registerAndSavePushToken = async () => {
+    try {
+      const pushToken = await registerForPushNotifications();
+      if (pushToken) {
+        await savePushTokenToServer(pushToken);
+        console.log("✅ Push token saved:", pushToken);
+      }
+    } catch (e) {
+      console.error("Failed to register push token:", e);
+    }
+  };
 
   const login = async (email, password) => {
     const res = await authApi.login(email, password);
@@ -34,6 +82,12 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem("auth_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+
+    // Đăng ký push token cho rescue_team
+    if (newUser.role === "rescue_team") {
+      setTimeout(() => registerAndSavePushToken(), 1000);
+    }
+
     return newUser;
   };
 

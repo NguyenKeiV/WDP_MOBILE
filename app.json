@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8b3244dd-9d91-4c7d-9554-a976e5fdacbf"
+      }
+    },
+    "owner": "vynguyen2011"
   }
 }
