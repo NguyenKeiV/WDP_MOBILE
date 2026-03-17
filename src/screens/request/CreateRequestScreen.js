@@ -20,6 +20,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { requestsApi } from "../../api/requests";
+import MapView, { Marker } from "react-native-maps";
 import { uploadImage } from "../../api/upload";
 import { useAuth } from "../../context/AuthContext";
 import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
@@ -27,11 +28,11 @@ import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
 const CATEGORY_CONFIG = {
   rescue: {
     icon: "medical-services",
-    label: "Y tế",
+    label: "Cứu hộ",
   },
   relief: {
     icon: "inventory-2",
-    label: "Nhu yếu phẩm",
+    label: "Cứu trợ",
   },
 };
 
@@ -125,12 +126,27 @@ export default function CreateRequestScreen({ navigation }) {
       setGpsCoords({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
+        address: null,
       });
     } catch (e) {
       Alert.alert("Lỗi", "Không lấy được vị trí GPS. Vui lòng thử lại.");
     } finally {
       setGpsLoading(false);
     }
+  };
+
+  const openMapPicker = () => {
+    navigation.navigate("MapPicker", {
+      initialLatitude: gpsCoords?.latitude,
+      initialLongitude: gpsCoords?.longitude,
+      onConfirm: (result) => {
+        setGpsCoords({
+          latitude: result.latitude,
+          longitude: result.longitude,
+          address: result.address,
+        });
+      },
+    });
   };
 
   useEffect(() => {
@@ -152,7 +168,10 @@ export default function CreateRequestScreen({ navigation }) {
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh để đính kèm ảnh.");
+      Alert.alert(
+        "Cần quyền",
+        "Cho phép truy cập thư viện ảnh để đính kèm ảnh.",
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -161,10 +180,9 @@ export default function CreateRequestScreen({ navigation }) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.length) {
-      setMediaUris((prev) => [
-        ...prev,
-        ...result.assets.map((a) => a.uri),
-      ].slice(0, 10));
+      setMediaUris((prev) =>
+        [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+      );
     }
   };
 
@@ -193,6 +211,7 @@ export default function CreateRequestScreen({ navigation }) {
         location_type: "gps",
         latitude: gpsCoords.latitude,
         longitude: gpsCoords.longitude,
+        address: gpsCoords.address || null,
         media_urls,
       });
 
@@ -248,10 +267,11 @@ export default function CreateRequestScreen({ navigation }) {
     );
   }
 
-  const selectedPriority = PRIORITIES.find((p) => p.value === form.priority);
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.grayLight }} edges={["top", "bottom"]}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: COLORS.grayLight }}
+      edges={["top", "bottom"]}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -267,11 +287,7 @@ export default function CreateRequestScreen({ navigation }) {
               onPress={() => navigation.goBack()}
               activeOpacity={0.7}
             >
-              <MaterialIcons
-                name="arrow-back"
-                size={20}
-                color={COLORS.text}
-              />
+              <MaterialIcons name="arrow-back" size={20} color={COLORS.text} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Tạo yêu cầu cứu hộ</Text>
             <View style={styles.headerSpacer} />
@@ -287,249 +303,299 @@ export default function CreateRequestScreen({ navigation }) {
             </View>
           </View>
 
-        {/* Loại hình cứu hộ - cards 2 cột */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Loại hình cứu hộ <Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.categoryGrid}>
-            {CATEGORIES.map((cat) => {
-              const cfg = CATEGORY_CONFIG[cat.value] || {};
-              const isActive = form.category === cat.value;
-              return (
-                <TouchableOpacity
-                  key={cat.value}
-                  style={[
-                    styles.categoryCard,
-                    isActive && styles.categoryCardActive,
-                  ]}
-                  onPress={() => update("category", cat.value)}
-                  activeOpacity={0.9}
-                >
-                  <MaterialIcons
-                    name={cfg.icon || "emergency"}
-                    size={32}
-                    color={isActive ? COLORS.primary : COLORS.textLight}
-                    style={{ marginBottom: 6 }}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryCardLabel,
-                      isActive && styles.categoryCardLabelActive,
-                    ]}
-                  >
-                    {cfg.label || cat.label.replace(/^[^\wÀ-ỹ]+?\s*/, "")}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* Số điện thoại */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Số điện thoại <Text style={styles.required}>*</Text>
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0912 345 678"
-            value={form.phone_number}
-            onChangeText={(v) => update("phone_number", v)}
-            keyboardType="phone-pad"
-          />
-        </View>
-
-        {/* Mô tả */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Mô tả tình trạng <Text style={styles.required}>*</Text>
-          </Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            placeholder="Nhập chi tiết tình huống cần cứu hộ..."
-            value={form.description}
-            onChangeText={(v) => update("description", v)}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-          <Text style={styles.charCount}>
-            {form.description.length} ký tự (tối thiểu 10)
-          </Text>
-        </View>
-
-        {/* Đính kèm ảnh (tùy chọn) */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Đính kèm ảnh (tùy chọn)</Text>
-          <TouchableOpacity
-            style={styles.addPhotoBtn}
-            onPress={pickImages}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="add-photo-alternate" size={24} color={COLORS.primary} />
-            <Text style={styles.addPhotoText}>Chọn ảnh từ thư viện</Text>
-            {mediaUris.length > 0 && (
-              <Text style={styles.addPhotoCount}>{mediaUris.length} ảnh</Text>
-            )}
-          </TouchableOpacity>
-          {mediaUris.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaPreviewRow}>
-              {mediaUris.map((uri, index) => (
-                <View key={index} style={styles.mediaPreviewWrap}>
-                  <Image source={{ uri }} style={styles.mediaPreview} />
+          {/* Loại hình cứu hộ */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>
+              Loại hình cứu hộ <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.categoryGrid}>
+              {CATEGORIES.map((cat) => {
+                const cfg = CATEGORY_CONFIG[cat.value] || {};
+                const isActive = form.category === cat.value;
+                return (
                   <TouchableOpacity
-                    style={styles.mediaRemove}
-                    onPress={() => removeMediaUri(index)}
+                    key={cat.value}
+                    style={[
+                      styles.categoryCard,
+                      isActive && styles.categoryCardActive,
+                    ]}
+                    onPress={() => update("category", cat.value)}
+                    activeOpacity={0.9}
                   >
-                    <MaterialIcons name="close" size={16} color={COLORS.white} />
+                    <MaterialIcons
+                      name={cfg.icon || "emergency"}
+                      size={32}
+                      color={isActive ? COLORS.primary : COLORS.textLight}
+                      style={{ marginBottom: 6 }}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryCardLabel,
+                        isActive && styles.categoryCardLabelActive,
+                      ]}
+                    >
+                      {cfg.label || cat.label.replace(/^[^\wÀ-ỹ]+?\s*/, "")}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
+                );
+              })}
+            </View>
+          </View>
 
-        {/* Số người & Mức ưu tiên */}
-        <View style={styles.row2}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Số người</Text>
+          {/* Số điện thoại */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>
+              Số điện thoại <Text style={styles.required}>*</Text>
+            </Text>
             <TextInput
               style={styles.input}
-              value={form.num_people}
-              onChangeText={(v) =>
-                update("num_people", v.replace(/[^0-9]/g, ""))
-              }
-              keyboardType="number-pad"
+              placeholder="0912 345 678"
+              value={form.phone_number}
+              onChangeText={(v) => update("phone_number", v)}
+              keyboardType="phone-pad"
             />
           </View>
-          <View style={[styles.field, { flex: 2 }]}>
-            <Text style={styles.fieldLabel}>Mức độ ưu tiên</Text>
-            <View style={styles.prioritySegment}>
-              {[
-                "low",
-                "medium",
-                "high",
-                "urgent",
-              ]
-                .map((value) => PRIORITIES.find((p) => p.value === value))
-                .filter(Boolean)
-                .map((p) => {
-                  const isActive = form.priority === p.value;
-                  let label = "";
-                  switch (p.value) {
-                    case "low":
-                      label = "Thấp";
-                      break;
-                    case "medium":
-                      label = "Trung bình";
-                      break;
-                    case "high":
-                      label = "Cao";
-                      break;
-                    case "urgent":
-                      label = "Khẩn cấp";
-                      break;
-                    default:
-                      label = p.label;
-                  }
-                  return (
-                    <TouchableOpacity
-                      key={p.value}
-                      style={[
-                        styles.priorityBtn,
-                        isActive && styles.priorityBtnActive,
-                      ]}
-                      onPress={() => update("priority", p.value)}
-                      activeOpacity={0.9}
-                    >
-                      <Text
-                        style={[
-                          styles.priorityBtnText,
-                          isActive && styles.priorityBtnTextActive,
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-            </View>
-          </View>
-        </View>
 
-        {/* GPS / Vị trí hiện tại */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Vị trí <Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.locationHeaderRow}>
-            <Text style={styles.locationLabel}>Vị trí hiện tại</Text>
-            <View style={styles.locationStatus}>
-              <View style={styles.locationDot} />
-              <Text style={styles.locationStatusText}>
-                {gpsCoords ? "Đã xác định vị trí" : "Chưa có vị trí"}
-              </Text>
-            </View>
+          {/* Mô tả */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>
+              Mô tả tình trạng <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder="Nhập chi tiết tình huống cần cứu hộ..."
+              value={form.description}
+              onChangeText={(v) => update("description", v)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <Text style={styles.charCount}>
+              {form.description.length} ký tự (tối thiểu 10)
+            </Text>
           </View>
-          <View style={styles.mapPreview}>
-            <View style={styles.mapPreviewInner}>
+
+          {/* Đính kèm ảnh */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Đính kèm ảnh (tùy chọn)</Text>
+            <TouchableOpacity
+              style={styles.addPhotoBtn}
+              onPress={pickImages}
+              activeOpacity={0.8}
+            >
               <MaterialIcons
-                name="map"
-                size={32}
-                color={COLORS.textLight}
+                name="add-photo-alternate"
+                size={24}
+                color={COLORS.primary}
+              />
+              <Text style={styles.addPhotoText}>Chọn ảnh từ thư viện</Text>
+              {mediaUris.length > 0 && (
+                <Text style={styles.addPhotoCount}>{mediaUris.length} ảnh</Text>
+              )}
+            </TouchableOpacity>
+            {mediaUris.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.mediaPreviewRow}
+              >
+                {mediaUris.map((uri, index) => (
+                  <View key={index} style={styles.mediaPreviewWrap}>
+                    <Image source={{ uri }} style={styles.mediaPreview} />
+                    <TouchableOpacity
+                      style={styles.mediaRemove}
+                      onPress={() => removeMediaUri(index)}
+                    >
+                      <MaterialIcons
+                        name="close"
+                        size={16}
+                        color={COLORS.white}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Số người & Mức ưu tiên */}
+          <View style={styles.row2}>
+            <View style={[styles.field, { flex: 1 }]}>
+              <Text style={styles.fieldLabel}>Số người</Text>
+              <TextInput
+                style={styles.input}
+                value={form.num_people}
+                onChangeText={(v) =>
+                  update("num_people", v.replace(/[^0-9]/g, ""))
+                }
+                keyboardType="number-pad"
               />
             </View>
-            <View style={styles.mapPreviewControls}>
-              <TouchableOpacity
-                style={styles.mapIconBtn}
-                onPress={getLocation}
-                disabled={gpsLoading}
-              >
-                {gpsLoading ? (
-                  <ActivityIndicator color={COLORS.text} size="small" />
-                ) : (
-                  <MaterialIcons
-                    name="my-location"
-                    size={20}
-                    color={COLORS.text}
+            <View style={[styles.field, { flex: 2 }]}>
+              <Text style={styles.fieldLabel}>Mức độ ưu tiên</Text>
+              <View style={styles.prioritySegment}>
+                {["low", "medium", "high", "urgent"]
+                  .map((value) => PRIORITIES.find((p) => p.value === value))
+                  .filter(Boolean)
+                  .map((p) => {
+                    const isActive = form.priority === p.value;
+                    const labels = {
+                      low: "Thấp",
+                      medium: "TB",
+                      high: "Cao",
+                      urgent: "Khẩn",
+                    };
+                    return (
+                      <TouchableOpacity
+                        key={p.value}
+                        style={[
+                          styles.priorityBtn,
+                          isActive && styles.priorityBtnActive,
+                        ]}
+                        onPress={() => update("priority", p.value)}
+                        activeOpacity={0.9}
+                      >
+                        <Text
+                          style={[
+                            styles.priorityBtnText,
+                            isActive && styles.priorityBtnTextActive,
+                          ]}
+                        >
+                          {labels[p.value]}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            </View>
+          </View>
+
+          {/* Vị trí GPS */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>
+              Vị trí <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.locationHeaderRow}>
+              <Text style={styles.locationLabel}>Vị trí hiện tại</Text>
+              <View style={styles.locationStatus}>
+                <View
+                  style={[
+                    styles.locationDot,
+                    {
+                      backgroundColor: gpsCoords ? COLORS.success : COLORS.gray,
+                    },
+                  ]}
+                />
+                <Text style={styles.locationStatusText}>
+                  {gpsCoords ? "Đã xác định vị trí" : "Chưa có vị trí"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.mapPreview}>
+              {gpsCoords ? (
+                <MapView
+                  style={StyleSheet.absoluteFillObject}
+                  initialRegion={{
+                    latitude: gpsCoords.latitude,
+                    longitude: gpsCoords.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  region={{
+                    latitude: gpsCoords.latitude,
+                    longitude: gpsCoords.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: gpsCoords.latitude,
+                      longitude: gpsCoords.longitude,
+                    }}
+                    pinColor={COLORS.primary}
                   />
-                )}
+                </MapView>
+              ) : (
+                <View style={styles.mapPreviewInner}>
+                  <MaterialIcons
+                    name="map"
+                    size={32}
+                    color={COLORS.textLight}
+                  />
+                  <Text style={styles.mapPlaceholderText}>Chưa có vị trí</Text>
+                </View>
+              )}
+              <View style={styles.mapPreviewControls}>
+                {/* Nút lấy vị trí hiện tại */}
+                <TouchableOpacity
+                  style={styles.mapIconBtn}
+                  onPress={getLocation}
+                  disabled={gpsLoading}
+                >
+                  {gpsLoading ? (
+                    <ActivityIndicator color={COLORS.text} size="small" />
+                  ) : (
+                    <MaterialIcons
+                      name="my-location"
+                      size={20}
+                      color={COLORS.text}
+                    />
+                  )}
+                </TouchableOpacity>
+                {/* Nút chọn trên bản đồ */}
+                <TouchableOpacity
+                  style={styles.mapIconBtn}
+                  onPress={openMapPicker}
+                >
+                  <MaterialIcons name="map" size={20} color={COLORS.text} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.gpsInfoRow}>
+              {gpsCoords ? (
+                <View>
+                  <Text style={styles.gpsCords}>
+                    {gpsCoords.latitude.toFixed(5)},{" "}
+                    {gpsCoords.longitude.toFixed(5)}
+                  </Text>
+                  {gpsCoords.address ? (
+                    <Text style={styles.gpsAddress} numberOfLines={2}>
+                      📍 {gpsCoords.address}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <Text style={styles.gpsWaiting}>Chưa có tọa độ GPS...</Text>
+              )}
+            </View>
+
+            <View style={styles.districtRow}>
+              <TouchableOpacity
+                style={styles.selectBtn}
+                onPress={() => setModal("district")}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.selectBtnText,
+                    !form.district && styles.placeholder,
+                  ]}
+                >
+                  {form.district || "Chọn quận/huyện tại TP.HCM..."}
+                </Text>
+                <MaterialIcons
+                  name="expand-more"
+                  size={18}
+                  color={COLORS.textLight}
+                />
               </TouchableOpacity>
             </View>
           </View>
-          <View style={styles.gpsInfoRow}>
-            {gpsCoords ? (
-              <Text style={styles.gpsCords}>
-                {gpsCoords.latitude.toFixed(5)},{" "}
-                {gpsCoords.longitude.toFixed(5)}
-              </Text>
-            ) : (
-              <Text style={styles.gpsWaiting}>Chưa có tọa độ GPS...</Text>
-            )}
-          </View>
-          <View style={styles.districtRow}>
-            <TouchableOpacity
-              style={styles.selectBtn}
-              onPress={() => setModal("district")}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.selectBtnText,
-                  !form.district && styles.placeholder,
-                ]}
-              >
-                {form.district || "Chọn quận/huyện tại TP.HCM..."}
-              </Text>
-              <MaterialIcons
-                name="expand-more"
-                size={18}
-                color={COLORS.textLight}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
 
           <TouchableOpacity
             style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
@@ -608,11 +674,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 6,
   },
-  progressTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
+  progressTitle: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
   progressStep: {
     fontSize: 11,
     fontWeight: "600",
@@ -675,14 +737,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + "08",
   },
-  categoryCardLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  categoryCardLabelActive: {
-    color: COLORS.primary,
-  },
+  categoryCardLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  categoryCardLabelActive: { color: COLORS.primary },
   selectBtn: {
     backgroundColor: COLORS.white,
     borderWidth: 1.5,
@@ -728,6 +784,12 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
+  gpsAddress: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginTop: 4,
+    lineHeight: 16,
+  },
   gpsWaiting: { fontSize: 13, color: COLORS.textLight },
   prioritySegment: {
     flexDirection: "row",
@@ -751,36 +813,17 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  priorityBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: COLORS.textLight,
-  },
-  priorityBtnTextActive: {
-    color: COLORS.white,
-  },
+  priorityBtnText: { fontSize: 11, fontWeight: "700", color: COLORS.textLight },
+  priorityBtnTextActive: { color: COLORS.white },
   locationHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  locationLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  locationStatus: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  locationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.success,
-  },
+  locationLabel: { fontSize: 13, fontWeight: "600", color: COLORS.text },
+  locationStatus: { flexDirection: "row", alignItems: "center", gap: 6 },
+  locationDot: { width: 8, height: 8, borderRadius: 4 },
   locationStatusText: {
     fontSize: 11,
     fontWeight: "700",
@@ -820,12 +863,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  gpsInfoRow: {
-    marginTop: 4,
-  },
-  districtRow: {
-    marginTop: 8,
-  },
+  gpsInfoRow: { marginTop: 4 },
+  districtRow: { marginTop: 8 },
   submitBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Linking,
+  Platform,
 } from "react-native";
 import {
   SafeAreaView,
@@ -14,6 +15,7 @@ import {
 } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MapView, { Marker } from "react-native-maps";
+
 import { requestsApi } from "../../api/requests";
 import { COLORS, STATUS_CONFIG, CATEGORIES, PRIORITIES } from "../../constants";
 
@@ -74,7 +76,6 @@ export default function RequestDetailScreen({ route, navigation }) {
     </View>
   );
 
-  // Map hiển thị thuần chữ, không emoji/icon dẫn
   const friendlyCategory =
     data.category === "rescue"
       ? "Cứu hộ"
@@ -106,7 +107,6 @@ export default function RequestDetailScreen({ route, navigation }) {
   if (data.created_at) {
     timelineEvents.push({
       key: "created",
-      color: COLORS.primary,
       label: "Yêu cầu được tạo",
       date: new Date(data.created_at),
     });
@@ -114,7 +114,6 @@ export default function RequestDetailScreen({ route, navigation }) {
   if (data.verified_at) {
     timelineEvents.push({
       key: "verified",
-      color: COLORS.primary,
       label: "Đã xác minh thông tin",
       date: new Date(data.verified_at),
     });
@@ -122,7 +121,6 @@ export default function RequestDetailScreen({ route, navigation }) {
   if (data.assigned_at) {
     timelineEvents.push({
       key: "assigned",
-      color: COLORS.primary,
       label: "Đội cứu hộ đã tiếp nhận",
       date: new Date(data.assigned_at),
     });
@@ -130,7 +128,6 @@ export default function RequestDetailScreen({ route, navigation }) {
   if (data.completed_at) {
     timelineEvents.push({
       key: "completed",
-      color: "#10b981",
       label: "Hoàn thành hỗ trợ",
       date: new Date(data.completed_at),
     });
@@ -144,6 +141,16 @@ export default function RequestDetailScreen({ route, navigation }) {
     const d = date.toLocaleDateString("vi-VN");
     return `${time} - ${d}`;
   };
+
+  const hasGps =
+    data.location_type === "gps" &&
+    data.latitude != null &&
+    data.longitude != null &&
+    !isNaN(parseFloat(data.latitude)) &&
+    !isNaN(parseFloat(data.longitude));
+
+  const targetLat = hasGps ? parseFloat(data.latitude) : null;
+  const targetLng = hasGps ? parseFloat(data.longitude) : null;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -171,6 +178,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           </Text>
         </View>
 
+        {/* Thông tin yêu cầu */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="info" size={18} color={COLORS.primary} />
@@ -207,6 +215,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           )}
         </View>
 
+        {/* Mô tả */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialIcons
@@ -216,27 +225,30 @@ export default function RequestDetailScreen({ route, navigation }) {
             />
             <Text style={styles.sectionTitle}>Mô tả tình huống</Text>
           </View>
-          <Text style={styles.description}>“{data.description}”</Text>
+          <Text style={styles.description}>"{data.description}"</Text>
         </View>
 
+        {/* Vị trí */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="place" size={18} color={COLORS.primary} />
             <Text style={styles.sectionTitle}>Vị trí</Text>
           </View>
-          {data.location_type === "gps" ? (
+
+          {hasGps ? (
             <>
               <Row icon="satellite-alt" label="Loại" value="GPS" />
               <Row
                 icon="my-location"
                 label="Tọa độ"
-                value={`${parseFloat(data.latitude).toFixed(6)}, ${parseFloat(data.longitude).toFixed(6)}`}
+                value={`${targetLat.toFixed(6)}, ${targetLng.toFixed(6)}`}
               />
+              {/* Inline MapView thay vì nút Google Maps */}
               <MapView
                 style={styles.inlineMap}
                 initialRegion={{
-                  latitude: parseFloat(data.latitude),
-                  longitude: parseFloat(data.longitude),
+                  latitude: targetLat,
+                  longitude: targetLng,
                   latitudeDelta: 0.01,
                   longitudeDelta: 0.01,
                 }}
@@ -244,16 +256,14 @@ export default function RequestDetailScreen({ route, navigation }) {
                 zoomEnabled={false}
               >
                 <Marker
-                  coordinate={{
-                    latitude: parseFloat(data.latitude),
-                    longitude: parseFloat(data.longitude),
-                  }}
+                  coordinate={{ latitude: targetLat, longitude: targetLng }}
                   title="Vị trí nạn nhân"
+                  description={data.address || data.district}
                   pinColor="red"
                 />
               </MapView>
               {data.address && (
-                <Text style={styles.addressText}>{data.address}</Text>
+                <Text style={styles.addressText}>📍 {data.address}</Text>
               )}
             </>
           ) : (
@@ -261,6 +271,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           )}
         </View>
 
+        {/* Người gửi */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="person" size={18} color={COLORS.primary} />
@@ -284,6 +295,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           </View>
         </View>
 
+        {/* Đội cứu hộ */}
         {data.assigned_team && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -296,7 +308,6 @@ export default function RequestDetailScreen({ route, navigation }) {
               label="Quận"
               value={data.assigned_team.district}
             />
-
             <TouchableOpacity
               onPress={() =>
                 Linking.openURL(`tel:${data.assigned_team.phone_number}`)
@@ -316,6 +327,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           </View>
         )}
 
+        {/* Ghi chú */}
         {data.notes && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -326,6 +338,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           </View>
         )}
 
+        {/* Timeline */}
         {timelineEvents.length > 0 && (
           <View style={styles.timelineSection}>
             <View style={styles.timeline}>
@@ -435,20 +448,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  inlineMap: {
-    width: "100%",
-    height: 200,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  addressText: {
-    fontSize: 13,
-    color: COLORS.textLight,
-    lineHeight: 18,
-    marginTop: 4,
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -479,18 +478,20 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontStyle: "italic",
   },
-  mapBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 10,
-    padding: 12,
+  inlineMap: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  addressText: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    lineHeight: 18,
     marginTop: 4,
   },
-  mapBtnText: { color: COLORS.primary, fontWeight: "600", fontSize: 14 },
-  timestamps: { gap: 6 },
   noteText: {
     fontSize: 14,
     color: COLORS.text,
@@ -508,16 +509,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  requesterName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  requesterRole: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 2,
-  },
+  requesterName: { fontSize: 15, fontWeight: "700", color: COLORS.text },
+  requesterRole: { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
   requesterCallBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -541,36 +534,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  priorityChipText: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  mapPreview: {
-    height: 160,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#e5e7eb",
-    marginTop: 8,
-    marginBottom: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapPreviewInner: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapPreviewShadow: {
-    width: 28,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(0,0,0,0.2)",
-    marginTop: -6,
-  },
-  timelineSection: {
-    paddingHorizontal: 8,
-    paddingTop: 8,
-  },
+  priorityChipText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  timelineSection: { paddingHorizontal: 8, paddingTop: 8 },
   timeline: {
     paddingLeft: 8,
     borderLeftWidth: 2,
@@ -581,10 +546,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  timelineLeft: {
-    width: 32,
-    alignItems: "center",
-  },
+  timelineLeft: { width: 32, alignItems: "center" },
   timelineDot: {
     width: 12,
     height: 12,
@@ -593,33 +555,16 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: COLORS.white,
   },
-  timelineDotSuccess: {
-    backgroundColor: "#10b981",
-  },
+  timelineDotSuccess: { backgroundColor: "#10b981" },
   timelineLine: {
     flex: 1,
     width: 2,
     backgroundColor: COLORS.primary + "33",
     marginTop: 2,
   },
-  timelineContent: {
-    flex: 1,
-    paddingLeft: 4,
-    gap: 2,
-  },
-  timelineTime: {
-    fontSize: 11,
-    color: COLORS.textLight,
-  },
-  timelineTimeSuccess: {
-    color: "#10b981",
-    fontWeight: "700",
-  },
-  timelineLabel: {
-    fontSize: 13,
-    color: COLORS.text,
-  },
-  timelineLabelStrong: {
-    fontWeight: "700",
-  },
+  timelineContent: { flex: 1, paddingLeft: 4, gap: 2 },
+  timelineTime: { fontSize: 11, color: COLORS.textLight },
+  timelineTimeSuccess: { color: "#10b981", fontWeight: "700" },
+  timelineLabel: { fontSize: 13, color: COLORS.text },
+  timelineLabelStrong: { fontWeight: "700" },
 });
