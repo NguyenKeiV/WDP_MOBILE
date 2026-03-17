@@ -8,9 +8,12 @@ import {
   TouchableOpacity,
   Linking,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-
+import MapView, { Marker } from "react-native-maps";
 import { requestsApi } from "../../api/requests";
 import { COLORS, STATUS_CONFIG, CATEGORIES, PRIORITIES } from "../../constants";
 
@@ -76,8 +79,8 @@ export default function RequestDetailScreen({ route, navigation }) {
     data.category === "rescue"
       ? "Cứu hộ"
       : data.category === "relief"
-      ? "Cứu trợ"
-      : category?.label?.replace(/^[^\wÀ-ỹ]+?\s*/, "") || data.category;
+        ? "Cứu trợ"
+        : category?.label?.replace(/^[^\wÀ-ỹ]+?\s*/, "") || data.category;
 
   let friendlyPriority = "";
   switch (priority?.value) {
@@ -150,11 +153,7 @@ export default function RequestDetailScreen({ route, navigation }) {
           style={styles.headerBack}
           activeOpacity={0.7}
         >
-          <MaterialIcons
-            name="arrow-back"
-            size={20}
-            color={COLORS.text}
-          />
+          <MaterialIcons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chi tiết yêu cầu cứu trợ</Text>
         <View style={styles.headerSpacer} />
@@ -174,16 +173,16 @@ export default function RequestDetailScreen({ route, navigation }) {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-          <MaterialIcons name="info" size={18} color={COLORS.primary} />
+            <MaterialIcons name="info" size={18} color={COLORS.primary} />
             <Text style={styles.sectionTitle}>Thông tin yêu cầu</Text>
           </View>
-          <Row
-            icon="label"
-            label="Loại yêu cầu"
-            value={friendlyCategory}
-          />
+          <Row icon="label" label="Loại yêu cầu" value={friendlyCategory} />
           <Row icon="location-on" label="Quận/Huyện" value={data.district} />
-          <Row icon="groups" label="Số người" value={`${data.num_people} người`} />
+          <Row
+            icon="groups"
+            label="Số người"
+            value={`${data.num_people} người`}
+          />
           {priority && (
             <View style={styles.row}>
               <View style={styles.rowLeft}>
@@ -199,10 +198,7 @@ export default function RequestDetailScreen({ route, navigation }) {
                 ]}
               >
                 <Text
-                  style={[
-                    styles.priorityChipText,
-                    { color: priorityColor },
-                  ]}
+                  style={[styles.priorityChipText, { color: priorityColor }]}
                 >
                   {friendlyPriority}
                 </Text>
@@ -213,25 +209,19 @@ export default function RequestDetailScreen({ route, navigation }) {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-          <MaterialIcons
-            name="description"
-            size={18}
-            color={COLORS.primary}
-          />
+            <MaterialIcons
+              name="description"
+              size={18}
+              color={COLORS.primary}
+            />
             <Text style={styles.sectionTitle}>Mô tả tình huống</Text>
           </View>
-          <Text style={styles.description}>
-            “{data.description}”
-          </Text>
+          <Text style={styles.description}>“{data.description}”</Text>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-          <MaterialIcons
-            name="place"
-            size={18}
-            color={COLORS.primary}
-          />
+            <MaterialIcons name="place" size={18} color={COLORS.primary} />
             <Text style={styles.sectionTitle}>Vị trí</Text>
           </View>
           {data.location_type === "gps" ? (
@@ -240,33 +230,31 @@ export default function RequestDetailScreen({ route, navigation }) {
               <Row
                 icon="my-location"
                 label="Tọa độ"
-                value={`${data.latitude}, ${data.longitude}`}
+                value={`${parseFloat(data.latitude).toFixed(6)}, ${parseFloat(data.longitude).toFixed(6)}`}
               />
-              <View style={styles.mapPreview}>
-                <View style={styles.mapPreviewInner}>
-                  <MaterialIcons
-                    name="location-on"
-                    size={40}
-                    color={COLORS.danger || "#ef4444"}
-                  />
-                  <View style={styles.mapPreviewShadow} />
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.mapBtn}
-                onPress={() =>
-                  Linking.openURL(
-                    `https://www.google.com/maps?q=${data.latitude},${data.longitude}`,
-                  )
-                }
+              <MapView
+                style={styles.inlineMap}
+                initialRegion={{
+                  latitude: parseFloat(data.latitude),
+                  longitude: parseFloat(data.longitude),
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
               >
-                <MaterialIcons
-                  name="map"
-                  size={18}
-                  color={COLORS.primary}
+                <Marker
+                  coordinate={{
+                    latitude: parseFloat(data.latitude),
+                    longitude: parseFloat(data.longitude),
+                  }}
+                  title="Vị trí nạn nhân"
+                  pinColor="red"
                 />
-                <Text style={styles.mapBtnText}>Xem trên Google Maps</Text>
-              </TouchableOpacity>
+              </MapView>
+              {data.address && (
+                <Text style={styles.addressText}>{data.address}</Text>
+              )}
             </>
           ) : (
             <Row icon="home" label="Địa chỉ" value={data.address} />
@@ -275,7 +263,7 @@ export default function RequestDetailScreen({ route, navigation }) {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-          <MaterialIcons name="person" size={18} color={COLORS.primary} />
+            <MaterialIcons name="person" size={18} color={COLORS.primary} />
             <Text style={styles.sectionTitle}>Người gửi yêu cầu</Text>
           </View>
           <View style={styles.requesterRow}>
@@ -299,11 +287,7 @@ export default function RequestDetailScreen({ route, navigation }) {
         {data.assigned_team && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <MaterialIcons
-                name="groups"
-                size={18}
-                color={COLORS.primary}
-              />
+              <MaterialIcons name="groups" size={18} color={COLORS.primary} />
               <Text style={styles.sectionTitle}>Đội cứu hộ</Text>
             </View>
             <Row icon="badge" label="Tên đội" value={data.assigned_team.name} />
@@ -334,15 +318,11 @@ export default function RequestDetailScreen({ route, navigation }) {
 
         {data.notes && (
           <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <MaterialIcons
-              name="notes"
-              size={18}
-              color={COLORS.primary}
-            />
-            <Text style={styles.sectionTitle}>Ghi chú nội bộ</Text>
-          </View>
-          <Text style={styles.noteText}>{data.notes}</Text>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons name="notes" size={18} color={COLORS.primary} />
+              <Text style={styles.sectionTitle}>Ghi chú nội bộ</Text>
+            </View>
+            <Text style={styles.noteText}>{data.notes}</Text>
           </View>
         )}
 
@@ -454,6 +434,20 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  inlineMap: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  addressText: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    lineHeight: 18,
+    marginTop: 4,
   },
   row: {
     flexDirection: "row",
