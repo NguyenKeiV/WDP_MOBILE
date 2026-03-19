@@ -9,7 +9,10 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { missionsApi } from "../../api/missions";
 import { useAuth } from "../../context/AuthContext";
@@ -22,13 +25,36 @@ const PRIORITY_CONFIG = {
   low: { label: "🟢 Thấp", color: "#388E3C" },
 };
 
+const STATUS_MISSION_CONFIG = {
+  on_mission: {
+    label: "Đang cứu hộ",
+    color: COLORS.primary,
+    bg: COLORS.primary + "1A",
+    icon: "local-shipping",
+  },
+  completed: {
+    label: "Hoàn thành",
+    color: "#388E3C",
+    bg: "#E8F5E9",
+    icon: "check-circle",
+  },
+  pending_verification: {
+    label: "Chờ phân công",
+    color: "#F57C00",
+    bg: "#FFF3E0",
+    icon: "pending-actions",
+  },
+};
+
 const MissionCard = ({ item, onPress }) => {
   const category = CATEGORIES.find((c) => c.value === item.category);
   const priority = PRIORITY_CONFIG[item.priority];
+  const missionStatus =
+    STATUS_MISSION_CONFIG[item.status] || STATUS_MISSION_CONFIG.on_mission;
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, item.status === "completed" && { opacity: 0.7 }]}
       onPress={() => onPress(item)}
       activeOpacity={0.85}
     >
@@ -51,7 +77,11 @@ const MissionCard = ({ item, onPress }) => {
 
       <View style={styles.cardInfo}>
         <View style={styles.infoRow}>
-          <MaterialIcons name="location-on" size={14} color={COLORS.textLight} />
+          <MaterialIcons
+            name="location-on"
+            size={14}
+            color={COLORS.textLight}
+          />
           <Text style={styles.infoItem}>{item.district}</Text>
         </View>
         <View style={styles.infoRow}>
@@ -73,9 +103,19 @@ const MissionCard = ({ item, onPress }) => {
             )}
           </Text>
         </View>
-        <View style={styles.onMissionBadge}>
-          <MaterialIcons name="local-shipping" size={12} color={COLORS.primary} />
-          <Text style={styles.onMissionText}>Đang cứu hộ</Text>
+        <View
+          style={[styles.statusBadge, { backgroundColor: missionStatus.bg }]}
+        >
+          <MaterialIcons
+            name={missionStatus.icon}
+            size={12}
+            color={missionStatus.color}
+          />
+          <Text
+            style={[styles.statusBadgeText, { color: missionStatus.color }]}
+          >
+            {missionStatus.label}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -122,6 +162,13 @@ export default function MissionsScreen({ navigation }) {
     ]);
   };
 
+  const onMissionCount = missions.filter(
+    (m) => m.status === "on_mission",
+  ).length;
+  const completedCount = missions.filter(
+    (m) => m.status === "completed",
+  ).length;
+
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerTop}>
@@ -134,24 +181,45 @@ export default function MissionsScreen({ navigation }) {
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
+
       {team && (
         <View style={styles.teamCard}>
+          {/* Tên đội + quận */}
           <View style={styles.teamInfoRow}>
             <View style={styles.teamIconWrap}>
-              <MaterialIcons name="person" size={18} color={COLORS.primary} />
+              <MaterialIcons name="groups" size={18} color={COLORS.primary} />
             </View>
             <View style={styles.teamInfoBody}>
-              <Text style={styles.teamLeader}>{team.leader_name}</Text>
+              <Text style={styles.teamLeader}>{team.name}</Text>
               <View style={styles.teamInfoMeta}>
                 <MaterialIcons
                   name="location-on"
                   size={12}
                   color={COLORS.textLight}
                 />
-                <Text style={styles.teamInfoText}>{team.district}</Text>
+                <Text style={styles.teamInfoText}>{team.district || "—"}</Text>
               </View>
             </View>
           </View>
+
+          {/* Đội trưởng */}
+          <View style={styles.leaderRow}>
+            <MaterialIcons name="person" size={14} color={COLORS.textLight} />
+            <Text style={styles.leaderText}>
+              Đội trưởng:{" "}
+              <Text style={styles.leaderName}>
+                {team.leader_account?.username || "—"}
+              </Text>
+            </Text>
+          </View>
+
+          {/* SĐT */}
+          <View style={styles.leaderRow}>
+            <MaterialIcons name="call" size={14} color={COLORS.textLight} />
+            <Text style={styles.leaderText}>{team.phone_number || "—"}</Text>
+          </View>
+
+          {/* Trạng thái */}
           <View
             style={[
               styles.teamStatus,
@@ -162,7 +230,9 @@ export default function MissionsScreen({ navigation }) {
             ]}
           >
             <MaterialIcons
-              name={team.status === "on_mission" ? "local-shipping" : "check-circle"}
+              name={
+                team.status === "on_mission" ? "local-shipping" : "check-circle"
+              }
               size={14}
               color={team.status === "on_mission" ? "#E53935" : "#388E3C"}
             />
@@ -177,8 +247,10 @@ export default function MissionsScreen({ navigation }) {
           </View>
         </View>
       )}
+
       <Text style={styles.missionCount}>
-        {missions.length} nhiệm vụ đang thực hiện
+        {onMissionCount} đang thực hiện
+        {completedCount > 0 ? " · " + completedCount + " hoàn thành" : ""}
       </Text>
     </View>
   );
@@ -216,7 +288,7 @@ export default function MissionsScreen({ navigation }) {
             </View>
             <Text style={styles.emptyTitle}>Không có nhiệm vụ nào</Text>
             <Text style={styles.emptyText}>
-              Đội của bạn hiện không có nhiệm vụ đang thực hiện
+              Đội của bạn hiện không có nhiệm vụ nào
             </Text>
           </View>
         }
@@ -279,7 +351,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   teamIconWrap: {
     width: 40,
@@ -302,6 +374,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   teamInfoText: { fontSize: 13, color: COLORS.textLight },
+  leaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  leaderText: {
+    fontSize: 13,
+    color: COLORS.textLight,
+  },
+  leaderName: {
+    fontWeight: "700",
+    color: COLORS.text,
+  },
   teamStatus: {
     flexDirection: "row",
     alignItems: "center",
@@ -310,6 +396,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+    marginTop: 4,
   },
   teamStatusText: { fontSize: 12, fontWeight: "700" },
   missionCount: { fontSize: 13, color: COLORS.textLight, marginBottom: 8 },
@@ -369,16 +456,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   footerDate: { fontSize: 11, color: COLORS.textLight },
-  onMissionBadge: {
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: COLORS.primary + "1A",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  onMissionText: { fontSize: 11, color: COLORS.primary, fontWeight: "600" },
+  statusBadgeText: { fontSize: 11, fontWeight: "600" },
   empty: { alignItems: "center", paddingVertical: 48 },
   emptyIconWrap: {
     width: 96,

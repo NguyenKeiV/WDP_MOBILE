@@ -9,14 +9,17 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
-  Dimensions,
   Modal,
   TextInput,
   Image,
+  Dimensions,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { missionsApi } from "../../api/missions";
@@ -35,7 +38,15 @@ const PRIORITY_CONFIG = {
 async function fetchRoute(fromLat, fromLng, toLat, toLng) {
   try {
     const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`,
+      "https://router.project-osrm.org/route/v1/driving/" +
+        fromLng +
+        "," +
+        fromLat +
+        ";" +
+        toLng +
+        "," +
+        toLat +
+        "?overview=full&geometries=geojson",
       { headers: { "User-Agent": "RescueApp/1.0" } },
     );
     const data = await res.json();
@@ -57,16 +68,24 @@ async function fetchRoute(fromLat, fromLng, toLat, toLng) {
 export default function MissionDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { mission, team } = route.params;
+
+  // Khởi tạo completed từ status thực tế của mission
+  const isAlreadyCompleted = mission.status === "completed";
+  const [completed, setCompleted] = useState(isAlreadyCompleted);
   const [completing, setCompleting] = useState(false);
-  const [completed, setCompleted] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completionNotes, setCompletionNotes] = useState("");
   const [completionMediaUris, setCompletionMediaUris] = useState([]);
+
   const [myLocation, setMyLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [showMap, setShowMap] = useState(true);
+
+  // Lightbox xem ảnh
+  const [viewingImage, setViewingImage] = useState(null);
+
   const mapRef = useRef(null);
 
   const category = CATEGORIES.find((c) => c.value === mission.category);
@@ -76,8 +95,16 @@ export default function MissionDetailScreen({ route, navigation }) {
   const targetLng = parseFloat(mission.longitude);
   const hasGps = !isNaN(targetLat) && !isNaN(targetLng);
 
+  // Ảnh người dùng gửi lên khi tạo yêu cầu
+  const userMediaUrls = Array.isArray(mission.media_urls)
+    ? mission.media_urls.filter(Boolean)
+    : [];
+
   useEffect(() => {
-    if (hasGps) initRouting();
+    // Chỉ load route nếu nhiệm vụ đang on_mission
+    if (hasGps && !isAlreadyCompleted) {
+      initRouting();
+    }
   }, []);
 
   const initRouting = async () => {
@@ -85,14 +112,11 @@ export default function MissionDetailScreen({ route, navigation }) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
-
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-
       const { latitude, longitude } = loc.coords;
       setMyLocation({ latitude, longitude });
-
       const result = await fetchRoute(
         latitude,
         longitude,
@@ -102,8 +126,6 @@ export default function MissionDetailScreen({ route, navigation }) {
       if (result) {
         setRouteCoords(result.coords);
         setRouteInfo({ distance: result.distance, duration: result.duration });
-
-        // Fit map to show both points
         setTimeout(() => {
           mapRef.current?.fitToCoordinates(
             [
@@ -125,28 +147,59 @@ export default function MissionDetailScreen({ route, navigation }) {
   };
 
   const handleCall = () => {
-    Linking.openURL(`tel:${mission.phone_number}`);
+    Linking.openURL("tel:" + mission.phone_number);
   };
 
-  const openCompleteModal = () => setShowCompleteModal(true);
-
   const pickCompletionImages = async () => {
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh để đính kèm ảnh báo cáo.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets?.length) {
-      setCompletionMediaUris((prev) =>
-        [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
-      );
-    }
+    Alert.alert(
+      "Chọn ảnh báo cáo",
+      "Bạn muốn chụp ảnh mới hay chọn từ thư viện?",
+      [
+        {
+          text: "📷 Chụp ảnh",
+          onPress: async () => {
+            const { status } =
+              await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Cần quyền", "Cho phép truy cập camera.");
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+              allowsEditing: true,
+            });
+            if (!result.canceled && result.assets?.length) {
+              setCompletionMediaUris((prev) =>
+                [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+              );
+            }
+          },
+        },
+        {
+          text: "🖼️ Thư viện",
+          onPress: async () => {
+            const { status } =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== "granted") {
+              Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh.");
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsMultipleSelection: true,
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length) {
+              setCompletionMediaUris((prev) =>
+                [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+              );
+            }
+          },
+        },
+        { text: "Hủy", style: "cancel" },
+      ],
+    );
   };
 
   const removeCompletionImage = (index) => {
@@ -154,6 +207,13 @@ export default function MissionDetailScreen({ route, navigation }) {
   };
 
   const handleSubmitComplete = async () => {
+    // Guard: không gọi API nếu đã completed
+    if (isAlreadyCompleted || completed) {
+      Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành rồi.");
+      setShowCompleteModal(false);
+      return;
+    }
+
     setCompleting(true);
     try {
       let completion_media_urls = [];
@@ -174,7 +234,7 @@ export default function MissionDetailScreen({ route, navigation }) {
       setCompleted(true);
       Alert.alert(
         "✅ Thành công",
-        "Nhiệm vụ đã được hoàn thành. Đội của bạn đã trở về trạng thái sẵn sàng.",
+        "Nhiệm vụ đã hoàn thành. Đội của bạn đã trở về trạng thái sẵn sàng.",
         [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     } catch (e) {
@@ -183,8 +243,6 @@ export default function MissionDetailScreen({ route, navigation }) {
       setCompleting(false);
     }
   };
-
-  const handleComplete = () => openCompleteModal();
 
   const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
 
@@ -196,9 +254,28 @@ export default function MissionDetailScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Status banner */}
-        <View style={styles.statusBanner}>
-          <MaterialIcons name="local-shipping" size={24} color={COLORS.primary} />
-          <Text style={styles.statusBannerText}>Đang thực hiện cứu hộ</Text>
+        <View
+          style={[
+            styles.statusBanner,
+            {
+              backgroundColor: completed ? "#E8F5E9" : COLORS.primary + "15",
+              borderColor: completed ? "#388E3C30" : COLORS.primary + "30",
+            },
+          ]}
+        >
+          <MaterialIcons
+            name={completed ? "check-circle" : "local-shipping"}
+            size={24}
+            color={completed ? "#388E3C" : COLORS.primary}
+          />
+          <Text
+            style={[
+              styles.statusBannerText,
+              { color: completed ? "#388E3C" : COLORS.primary },
+            ]}
+          >
+            {completed ? "Nhiệm vụ đã hoàn thành" : "Đang thực hiện cứu hộ"}
+          </Text>
         </View>
 
         {/* Category & Priority */}
@@ -219,7 +296,7 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Map inline */}
+        {/* Bản đồ */}
         {hasGps && (
           <View style={styles.card}>
             <View style={styles.mapHeader}>
@@ -233,7 +310,6 @@ export default function MissionDetailScreen({ route, navigation }) {
 
             {showMap && (
               <>
-                {/* Route info */}
                 {routeInfo && (
                   <View style={styles.routeInfo}>
                     <View style={styles.routeInfoItem}>
@@ -278,15 +354,12 @@ export default function MissionDetailScreen({ route, navigation }) {
                   showsUserLocation
                   showsMyLocationButton={false}
                 >
-                  {/* Marker nạn nhân */}
                   <Marker
                     coordinate={{ latitude: targetLat, longitude: targetLng }}
                     title="Vị trí nạn nhân"
                     description={mission.address || mission.district}
                     pinColor="red"
                   />
-
-                  {/* Marker vị trí đội */}
                   {myLocation && (
                     <Marker
                       coordinate={myLocation}
@@ -294,35 +367,38 @@ export default function MissionDetailScreen({ route, navigation }) {
                       pinColor="blue"
                     />
                   )}
-
-                  {/* Đường đi */}
                   {routeCoords.length > 0 && (
                     <Polyline
                       coordinates={routeCoords}
                       strokeColor={COLORS.primary}
                       strokeWidth={4}
-                      lineDashPattern={[0]}
                     />
                   )}
                 </MapView>
 
-                <TouchableOpacity
-                  style={styles.refreshRouteBtn}
-                  onPress={initRouting}
-                >
-                  <Text style={styles.refreshRouteBtnText}>
-                    🔄 Cập nhật tuyến đường
-                  </Text>
-                </TouchableOpacity>
+                {!completed && (
+                  <TouchableOpacity
+                    style={styles.refreshRouteBtn}
+                    onPress={initRouting}
+                  >
+                    <Text style={styles.refreshRouteBtnText}>
+                      🔄 Cập nhật tuyến đường
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
         )}
 
-        {/* Description */}
+        {/* Mô tả */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="description" size={18} color={COLORS.textLight} />
+            <MaterialIcons
+              name="description"
+              size={18}
+              color={COLORS.textLight}
+            />
             <Text style={styles.sectionTitle}>Mô tả tình huống</Text>
           </View>
           <Text style={styles.descText}>{mission.description}</Text>
@@ -342,7 +418,50 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Contact */}
+        {/* Ảnh người dùng gửi khi tạo yêu cầu */}
+        {userMediaUrls.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons
+                name="photo-library"
+                size={18}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.sectionTitle}>
+                {"Ảnh đính kèm (" + userMediaUrls.length + ")"}
+              </Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.mediaScrollRow}
+            >
+              {userMediaUrls.map((url, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => setViewingImage(url)}
+                  activeOpacity={0.85}
+                  style={styles.mediaThumbWrap}
+                >
+                  <Image
+                    source={{ uri: url }}
+                    style={styles.mediaThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.mediaZoomIcon}>
+                    <MaterialIcons
+                      name="zoom-in"
+                      size={16}
+                      color={COLORS.white}
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Liên hệ */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="call" size={18} color={COLORS.textLight} />
@@ -350,11 +469,13 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
           <TouchableOpacity style={styles.contactBtn} onPress={handleCall}>
             <MaterialIcons name="call" size={22} color={COLORS.white} />
-            <Text style={styles.contactBtnText}>Gọi {mission.phone_number}</Text>
+            <Text style={styles.contactBtnText}>
+              {"Gọi " + mission.phone_number}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Location text */}
+        {/* GPS */}
         {hasGps && (
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
@@ -366,7 +487,7 @@ export default function MissionDetailScreen({ route, navigation }) {
               <Text style={styles.sectionTitle}>Vị trí GPS</Text>
             </View>
             <Text style={styles.coordText}>
-              {targetLat.toFixed(6)}, {targetLng.toFixed(6)}
+              {targetLat.toFixed(6) + ", " + targetLng.toFixed(6)}
             </Text>
             {mission.address && (
               <Text style={styles.addressText}>{mission.address}</Text>
@@ -374,7 +495,7 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Team info */}
+        {/* Thông tin đội */}
         {team && (
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
@@ -384,11 +505,13 @@ export default function MissionDetailScreen({ route, navigation }) {
             <Text style={styles.teamName}>{team.name}</Text>
             <View style={styles.teamInfoRow}>
               <MaterialIcons name="person" size={16} color={COLORS.textLight} />
-              <Text style={styles.teamInfo}>Đội trưởng: {team.leader_name}</Text>
+              <Text style={styles.teamInfo}>
+                {"Đội trưởng: " + (team.leader_account?.username || "—")}
+              </Text>
             </View>
             <View style={styles.teamInfoRow}>
               <MaterialIcons name="call" size={16} color={COLORS.textLight} />
-              <Text style={styles.teamInfo}>{team.phone_number}</Text>
+              <Text style={styles.teamInfo}>{team.phone_number || "—"}</Text>
             </View>
             <View style={styles.teamInfoRow}>
               <MaterialIcons
@@ -396,12 +519,12 @@ export default function MissionDetailScreen({ route, navigation }) {
                 size={16}
                 color={COLORS.textLight}
               />
-              <Text style={styles.teamInfo}>{team.district}</Text>
+              <Text style={styles.teamInfo}>{team.district || "—"}</Text>
             </View>
           </View>
         )}
 
-        {/* Time */}
+        {/* Thời gian */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="schedule" size={18} color={COLORS.textLight} />
@@ -410,7 +533,8 @@ export default function MissionDetailScreen({ route, navigation }) {
           <View style={styles.timeRow}>
             <MaterialIcons name="event" size={16} color={COLORS.textLight} />
             <Text style={styles.timeText}>
-              Tạo lúc: {new Date(mission.created_at).toLocaleString("vi-VN")}
+              {"Tạo lúc: " +
+                new Date(mission.created_at).toLocaleString("vi-VN")}
             </Text>
           </View>
           {mission.assigned_at && (
@@ -421,18 +545,18 @@ export default function MissionDetailScreen({ route, navigation }) {
                 color={COLORS.textLight}
               />
               <Text style={styles.timeText}>
-                Phân công:{" "}
-                {new Date(mission.assigned_at).toLocaleString("vi-VN")}
+                {"Phân công: " +
+                  new Date(mission.assigned_at).toLocaleString("vi-VN")}
               </Text>
             </View>
           )}
         </View>
 
-        {/* Complete button */}
-        {!completed && (
+        {/* Nút hoàn thành — CHỈ hiện khi on_mission và chưa completed */}
+        {!completed && mission.status === "on_mission" && (
           <TouchableOpacity
             style={[styles.completeBtn, completing && { opacity: 0.7 }]}
-            onPress={handleComplete}
+            onPress={() => setShowCompleteModal(true)}
             disabled={completing}
           >
             {completing ? (
@@ -450,18 +574,15 @@ export default function MissionDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
+        {/* Banner đã hoàn thành */}
         {completed && (
           <View style={styles.completedBanner}>
-            <MaterialIcons
-              name="check-circle"
-              size={32}
-              color="#388E3C"
-            />
+            <MaterialIcons name="check-circle" size={32} color="#388E3C" />
             <Text style={styles.completedText}>Nhiệm vụ đã hoàn thành</Text>
           </View>
         )}
 
-        {/* Modal báo cáo hoàn thành: ghi chú + ảnh */}
+        {/* Modal báo cáo hoàn thành */}
         <Modal
           visible={showCompleteModal}
           transparent
@@ -487,11 +608,15 @@ export default function MissionDetailScreen({ route, navigation }) {
                 style={styles.modalAddPhotoBtn}
                 onPress={pickCompletionImages}
               >
-                <MaterialIcons name="add-photo-alternate" size={22} color={COLORS.primary} />
+                <MaterialIcons
+                  name="add-photo-alternate"
+                  size={22}
+                  color={COLORS.primary}
+                />
                 <Text style={styles.modalAddPhotoText}>Chọn ảnh báo cáo</Text>
                 {completionMediaUris.length > 0 && (
                   <Text style={styles.modalPhotoCount}>
-                    {completionMediaUris.length} ảnh
+                    {completionMediaUris.length + " ảnh"}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -508,7 +633,11 @@ export default function MissionDetailScreen({ route, navigation }) {
                         style={styles.modalPhotoRemove}
                         onPress={() => removeCompletionImage(index)}
                       >
-                        <MaterialIcons name="close" size={14} color={COLORS.white} />
+                        <MaterialIcons
+                          name="close"
+                          size={14}
+                          color={COLORS.white}
+                        />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -523,7 +652,10 @@ export default function MissionDetailScreen({ route, navigation }) {
                   <Text style={styles.modalCancelText}>Hủy</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalSubmitBtn, completing && { opacity: 0.7 }]}
+                  style={[
+                    styles.modalSubmitBtn,
+                    completing && { opacity: 0.7 },
+                  ]}
                   onPress={handleSubmitComplete}
                   disabled={completing}
                 >
@@ -538,6 +670,30 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         </Modal>
       </ScrollView>
+
+      {/* Lightbox xem ảnh fullscreen */}
+      <Modal
+        visible={!!viewingImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingImage(null)}
+      >
+        <View style={styles.lightboxOverlay}>
+          <TouchableOpacity
+            style={styles.lightboxClose}
+            onPress={() => setViewingImage(null)}
+          >
+            <MaterialIcons name="close" size={28} color={COLORS.white} />
+          </TouchableOpacity>
+          {viewingImage && (
+            <Image
+              source={{ uri: viewingImage }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -550,14 +706,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: COLORS.primary + "15",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: COLORS.primary + "30",
   },
-  statusBannerText: { color: COLORS.primary, fontWeight: "700", fontSize: 16 },
+  statusBannerText: { fontWeight: "700", fontSize: 16 },
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 14,
@@ -581,7 +735,6 @@ const styles = StyleSheet.create({
   },
   priorityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   priorityText: { fontSize: 12, fontWeight: "700" },
-
   mapHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -610,23 +763,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   mapLoadingText: { fontSize: 13, color: COLORS.textLight },
-  map: {
-    width: "100%",
-    height: 280,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  refreshRouteBtn: {
-    marginTop: 10,
-    alignItems: "center",
-    padding: 8,
-  },
+  map: { width: "100%", height: 280, borderRadius: 12, overflow: "hidden" },
+  refreshRouteBtn: { marginTop: 10, alignItems: "center", padding: 8 },
   refreshRouteBtnText: {
     fontSize: 13,
     color: COLORS.primary,
     fontWeight: "600",
   },
-
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -640,20 +783,47 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  descText: { fontSize: 14, color: COLORS.text, lineHeight: 22, marginBottom: 12 },
-  metaRow: { flexDirection: "row", gap: 24 },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  descText: {
+    fontSize: 14,
+    color: COLORS.text,
+    lineHeight: 22,
+    marginBottom: 12,
   },
-  metaLabel: { fontSize: 12, color: COLORS.textLight },
+  metaRow: { flexDirection: "row", gap: 24 },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: 8 },
   metaValue: { fontSize: 13, color: COLORS.text, fontWeight: "600" },
+  mediaScrollRow: { marginTop: 4 },
+  mediaThumbWrap: {
+    marginRight: 10,
+    borderRadius: 10,
+    overflow: "hidden",
+    position: "relative",
+  },
+  mediaThumb: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: "#e5e7eb",
+  },
+  mediaZoomIcon: {
+    position: "absolute",
+    bottom: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contactBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
   contactBtnText: { color: COLORS.white, fontWeight: "700", fontSize: 15 },
   coordText: {
@@ -667,13 +837,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: COLORS.black,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   teamInfoRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   teamInfo: { fontSize: 13, color: COLORS.text },
   timeRow: {
@@ -694,6 +864,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   completeBtnText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
+  completedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 14,
+    padding: 18,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#388E3C30",
+  },
+  completedText: { color: "#388E3C", fontSize: 17, fontWeight: "800" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -712,11 +895,7 @@ const styles = StyleSheet.create({
     color: COLORS.black,
     marginBottom: 4,
   },
-  modalCompleteSub: {
-    fontSize: 13,
-    color: COLORS.textLight,
-    marginBottom: 14,
-  },
+  modalCompleteSub: { fontSize: 13, color: COLORS.textLight, marginBottom: 14 },
   modalCompleteInput: {
     borderWidth: 1,
     borderColor: COLORS.grayBorder,
@@ -772,17 +951,26 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   modalSubmitText: { fontSize: 14, color: COLORS.white, fontWeight: "700" },
-  completedBanner: {
-    flexDirection: "row",
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lightboxClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    backgroundColor: "#E8F5E9",
-    borderRadius: 14,
-    padding: 18,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#388E3C30",
   },
-  completedText: { color: "#388E3C", fontSize: 17, fontWeight: "800" },
+  lightboxImage: {
+    width: width,
+    height: "80%",
+  },
 });
