@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { missionsApi } from "../../api/missions";
 import { useAuth } from "../../context/AuthContext";
 import { COLORS, CATEGORIES } from "../../constants";
@@ -34,11 +36,13 @@ const MissionCard = ({ item, onPress }) => {
         <Text style={styles.cardCategory}>
           {category?.label || item.category}
         </Text>
-        <View style={[styles.priorityBadge, { borderColor: priority?.color }]}>
-          <Text style={[styles.priorityText, { color: priority?.color }]}>
-            {priority?.label}
-          </Text>
-        </View>
+        {priority && (
+          <View style={[styles.priorityBadge, { borderColor: priority.color }]}>
+            <Text style={[styles.priorityText, { color: priority.color }]}>
+              {priority.label}
+            </Text>
+          </View>
+        )}
       </View>
 
       <Text style={styles.cardDesc} numberOfLines={2}>
@@ -46,20 +50,32 @@ const MissionCard = ({ item, onPress }) => {
       </Text>
 
       <View style={styles.cardInfo}>
-        <Text style={styles.infoItem}>📍 {item.district}</Text>
-        <Text style={styles.infoItem}>👥 {item.num_people} người</Text>
-        <Text style={styles.infoItem}>📞 {item.phone_number}</Text>
+        <View style={styles.infoRow}>
+          <MaterialIcons name="location-on" size={14} color={COLORS.textLight} />
+          <Text style={styles.infoItem}>{item.district}</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <MaterialIcons name="groups" size={14} color={COLORS.textLight} />
+          <Text style={styles.infoItem}>{item.num_people} người</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <MaterialIcons name="call" size={14} color={COLORS.textLight} />
+          <Text style={styles.infoItem}>{item.phone_number}</Text>
+        </View>
       </View>
 
       <View style={styles.cardFooter}>
-        <Text style={styles.footerDate}>
-          🕐{" "}
-          {new Date(item.assigned_at || item.created_at).toLocaleString(
-            "vi-VN",
-          )}
-        </Text>
+        <View style={styles.footerRow}>
+          <MaterialIcons name="schedule" size={14} color={COLORS.textLight} />
+          <Text style={styles.footerDate}>
+            {new Date(item.assigned_at || item.created_at).toLocaleString(
+              "vi-VN",
+            )}
+          </Text>
+        </View>
         <View style={styles.onMissionBadge}>
-          <Text style={styles.onMissionText}>🚨 Đang cứu hộ</Text>
+          <MaterialIcons name="local-shipping" size={12} color={COLORS.primary} />
+          <Text style={styles.onMissionText}>Đang cứu hộ</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -68,6 +84,7 @@ const MissionCard = ({ item, onPress }) => {
 
 export default function MissionsScreen({ navigation }) {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [team, setTeam] = useState(null);
   const [missions, setMissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,17 +126,32 @@ export default function MissionsScreen({ navigation }) {
     <View style={styles.header}>
       <View style={styles.headerTop}>
         <View>
-          <Text style={styles.title}>🚒 Nhiệm vụ của đội</Text>
+          <Text style={styles.title}>Nhiệm vụ của đội</Text>
           {team && <Text style={styles.teamName}>{team.name}</Text>}
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <MaterialIcons name="exit-to-app" size={18} color={COLORS.primary} />
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
       </View>
       {team && (
-        <View style={styles.teamInfo}>
-          <Text style={styles.teamInfoText}>👨‍✈️ {team.leader_name}</Text>
-          <Text style={styles.teamInfoText}>📍 {team.district}</Text>
+        <View style={styles.teamCard}>
+          <View style={styles.teamInfoRow}>
+            <View style={styles.teamIconWrap}>
+              <MaterialIcons name="person" size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.teamInfoBody}>
+              <Text style={styles.teamLeader}>{team.leader_name}</Text>
+              <View style={styles.teamInfoMeta}>
+                <MaterialIcons
+                  name="location-on"
+                  size={12}
+                  color={COLORS.textLight}
+                />
+                <Text style={styles.teamInfoText}>{team.district}</Text>
+              </View>
+            </View>
+          </View>
           <View
             style={[
               styles.teamStatus,
@@ -129,15 +161,18 @@ export default function MissionsScreen({ navigation }) {
               },
             ]}
           >
+            <MaterialIcons
+              name={team.status === "on_mission" ? "local-shipping" : "check-circle"}
+              size={14}
+              color={team.status === "on_mission" ? "#E53935" : "#388E3C"}
+            />
             <Text
               style={[
                 styles.teamStatusText,
                 { color: team.status === "on_mission" ? "#E53935" : "#388E3C" },
               ]}
             >
-              {team.status === "on_mission"
-                ? "🚨 Đang nhiệm vụ"
-                : "✅ Sẵn sàng"}
+              {team.status === "on_mission" ? "Đang nhiệm vụ" : "Sẵn sàng"}
             </Text>
           </View>
         </View>
@@ -148,16 +183,20 @@ export default function MissionsScreen({ navigation }) {
     </View>
   );
 
+  const paddingBottom = (insets.bottom || 24) + 24;
+
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <FlatList
         data={missions}
         keyExtractor={(item) => item.id}
@@ -172,7 +211,9 @@ export default function MissionsScreen({ navigation }) {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>✅</Text>
+            <View style={styles.emptyIconWrap}>
+              <MaterialIcons name="assignment" size={48} color={COLORS.gray} />
+            </View>
             <Text style={styles.emptyTitle}>Không có nhiệm vụ nào</Text>
             <Text style={styles.emptyText}>
               Đội của bạn hiện không có nhiệm vụ đang thực hiện
@@ -186,10 +227,10 @@ export default function MissionsScreen({ navigation }) {
             tintColor={COLORS.primary}
           />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom }]}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -197,7 +238,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.grayLight },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   listContent: { padding: 16, paddingBottom: 32 },
-  header: { paddingTop: 36, marginBottom: 8 },
+  header: { paddingTop: 24, marginBottom: 8 },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -212,24 +253,62 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   logoutBtn: {
-    backgroundColor: COLORS.grayLight,
-    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primary + "1A",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
-  logoutText: { fontSize: 12, color: COLORS.danger, fontWeight: "600" },
-  teamInfo: {
+  logoutText: { fontSize: 12, color: COLORS.primary, fontWeight: "700" },
+  teamCard: {
     backgroundColor: COLORS.white,
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginBottom: 12,
-    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.grayLight,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  teamInfoText: { fontSize: 13, color: COLORS.text },
+  teamInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  teamIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  teamInfoBody: { flex: 1 },
+  teamLeader: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  teamInfoMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  teamInfoText: { fontSize: 13, color: COLORS.textLight },
   teamStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
   },
   teamStatusText: { fontSize: 12, fontWeight: "700" },
@@ -269,8 +348,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 10,
   },
-  cardInfo: { gap: 4, marginBottom: 10 },
-  infoItem: { fontSize: 12, color: COLORS.gray },
+  cardInfo: { gap: 6, marginBottom: 10 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  infoItem: { fontSize: 12, color: COLORS.textLight },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -279,16 +363,32 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.grayLight,
     paddingTop: 8,
   },
-  footerDate: { fontSize: 11, color: COLORS.gray },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  footerDate: { fontSize: 11, color: COLORS.textLight },
   onMissionBadge: {
-    backgroundColor: "#FFEBEE",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primary + "1A",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   onMissionText: { fontSize: 11, color: COLORS.primary, fontWeight: "600" },
   empty: { alignItems: "center", paddingVertical: 48 },
-  emptyIcon: { fontSize: 56, marginBottom: 12 },
+  emptyIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "hsl(210, 5%, 96%)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
   emptyTitle: {
     fontSize: 16,
     fontWeight: "700",

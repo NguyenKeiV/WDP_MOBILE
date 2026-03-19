@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApi } from "../api/auth";
+import { requestsApi } from "../api/requests";
 import {
   registerForPushNotifications,
   savePushTokenToServer,
@@ -82,6 +83,19 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem("auth_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    // Gắn yêu cầu tạo lúc guest vào tài khoản vừa đăng nhập
+    try {
+      const guestIds = await AsyncStorage.getItem("guest_request_ids");
+      if (guestIds) {
+        const ids = JSON.parse(guestIds);
+        if (ids && ids.length > 0) {
+          await requestsApi.linkToMe(ids);
+          await AsyncStorage.removeItem("guest_request_ids");
+        }
+      }
+    } catch (e) {
+      // Không chặn login nếu link thất bại
+    }
 
     // Đăng ký push token cho rescue_team
     if (newUser.role === "rescue_team") {

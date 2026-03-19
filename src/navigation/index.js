@@ -2,7 +2,8 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Text, ActivityIndicator, View } from "react-native";
+import { Text, ActivityIndicator, View, StyleSheet } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { useAuth } from "../context/AuthContext";
 import { COLORS } from "../constants";
@@ -16,32 +17,75 @@ import MyRequestsScreen from "../screens/request/MyRequestsScreen";
 import GuestRequestsScreen from "../screens/request/GuestRequestsScreen";
 import MissionsScreen from "../screens/missions/MissionsScreen";
 import MissionDetailScreen from "../screens/missions/MissionDetailScreen";
+import InventoryScreen from "../screens/rescue/InventoryScreen";
+import VehicleReturnScreen from "../screens/rescue/VehicleReturnScreen";
 import MapPickerScreen from "../screens/request/MapPickerScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function TabIcon({ icon, focused }) {
+const TAB_COLORS = {
+  primary: COLORS.primary,
+  active: COLORS.primary,
+  inactive: "#94a3b8",
+  border: "#e2e8f0",
+  bg: "rgba(255,255,255,0.95)",
+};
+
+function TabBarIcon({ name, focused, label }) {
+  const color = focused ? TAB_COLORS.active : TAB_COLORS.inactive;
   return (
-    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+    <View style={tabBarStyles.tabItem}>
+      <MaterialIcons name={name} size={24} color={color} />
+      <Text
+        style={[
+          tabBarStyles.label,
+          { color },
+          focused && tabBarStyles.labelActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
   );
 }
+
+const tabBarStyles = StyleSheet.create({
+  tabItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  labelActive: {
+    fontWeight: "800",
+  },
+});
 
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray,
+        tabBarActiveTintColor: TAB_COLORS.active,
+        tabBarInactiveTintColor: TAB_COLORS.inactive,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: COLORS.grayBorder,
+          borderTopColor: TAB_COLORS.border,
+          backgroundColor: TAB_COLORS.bg,
           paddingBottom: 8,
-          paddingTop: 4,
-          height: 60,
+          paddingTop: 12,
+          height: 64,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { display: "none" },
+        tabBarShowLabel: false,
       }}
     >
       <Tab.Screen
@@ -49,7 +93,9 @@ function MainTabs() {
         component={MyRequestsScreen}
         options={{
           tabBarLabel: "Yêu cầu của tôi",
-          tabBarIcon: ({ focused }) => <TabIcon icon="📋" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="assignment" focused={focused} label="Yêu cầu" />
+          ),
         }}
       />
       <Tab.Screen
@@ -57,7 +103,9 @@ function MainTabs() {
         component={CreateRequestScreen}
         options={{
           tabBarLabel: "Tạo yêu cầu",
-          tabBarIcon: ({ focused }) => <TabIcon icon="🆘" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="add-circle" focused={focused} label="Tạo yêu cầu" />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -69,16 +117,20 @@ function GuestTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray,
+        tabBarActiveTintColor: TAB_COLORS.active,
+        tabBarInactiveTintColor: TAB_COLORS.inactive,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: COLORS.grayBorder,
+          borderTopColor: TAB_COLORS.border,
+          backgroundColor: TAB_COLORS.bg,
           paddingBottom: 8,
-          paddingTop: 4,
-          height: 60,
+          paddingTop: 12,
+          height: 64,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { display: "none" },
+        tabBarShowLabel: false,
       }}
     >
       <Tab.Screen
@@ -86,7 +138,9 @@ function GuestTabs() {
         component={CreateRequestScreen}
         options={{
           tabBarLabel: "Tạo yêu cầu",
-          tabBarIcon: ({ focused }) => <TabIcon icon="🆘" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="add-circle" focused={focused} label="Tạo yêu cầu" />
+          ),
         }}
       />
       <Tab.Screen
@@ -94,7 +148,9 @@ function GuestTabs() {
         component={GuestRequestsScreen}
         options={{
           tabBarLabel: "Của tôi",
-          tabBarIcon: ({ focused }) => <TabIcon icon="📋" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="list" focused={focused} label="Của tôi" />
+          ),
         }}
       />
       <Tab.Screen
@@ -102,7 +158,9 @@ function GuestTabs() {
         component={LoginScreen}
         options={{
           tabBarLabel: "Đăng nhập",
-          tabBarIcon: ({ focused }) => <TabIcon icon="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="person" focused={focused} label="Đăng nhập" />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -114,16 +172,20 @@ function RescueTeamTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.gray,
+        tabBarActiveTintColor: TAB_COLORS.active,
+        tabBarInactiveTintColor: TAB_COLORS.inactive,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: COLORS.grayBorder,
+          borderTopColor: TAB_COLORS.border,
+          backgroundColor: TAB_COLORS.bg,
           paddingBottom: 8,
-          paddingTop: 4,
-          height: 60,
+          paddingTop: 12,
+          height: 64,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { display: "none" },
+        tabBarShowLabel: false,
       }}
     >
       <Tab.Screen
@@ -131,7 +193,29 @@ function RescueTeamTabs() {
         component={MissionsScreen}
         options={{
           tabBarLabel: "Nhiệm vụ",
-          tabBarIcon: ({ focused }) => <TabIcon icon="🚒" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="assignment" focused={focused} label="Nhiệm vụ" />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{
+          tabBarLabel: "Kiểm kê",
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="inventory-2" focused={focused} label="Kiểm kê" />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="VehicleReturn"
+        component={VehicleReturnScreen}
+        options={{
+          tabBarLabel: "Thu hồi xe",
+          tabBarIcon: ({ focused }) => (
+            <TabBarIcon name="local-shipping" focused={focused} label="Thu hồi xe" />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -176,7 +260,7 @@ export default function AppNavigator() {
               <Stack.Screen
                 name="RequestDetail"
                 component={RequestDetailScreen}
-                options={{ headerShown: true, title: "Chi tiết yêu cầu" }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="MapPicker"
@@ -197,7 +281,7 @@ export default function AppNavigator() {
             <Stack.Screen
               name="RequestDetail"
               component={RequestDetailScreen}
-              options={{ headerShown: true, title: "Chi tiết yêu cầu" }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="MapPicker"
