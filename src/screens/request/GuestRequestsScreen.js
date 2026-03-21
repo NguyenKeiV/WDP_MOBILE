@@ -13,6 +13,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { requestsApi } from "../../api/requests";
+import { GUEST_REQUEST_IDS_KEY } from "../../utils/deviceGuestRequests";
 import { STATUS_CONFIG, CATEGORIES } from "../../constants";
 
 const C = {
@@ -126,7 +127,7 @@ export default function GuestRequestsScreen({ navigation }) {
 
   const fetchGuestRequests = useCallback(async () => {
     try {
-      const existing = await AsyncStorage.getItem("guest_request_ids");
+      const existing = await AsyncStorage.getItem(GUEST_REQUEST_IDS_KEY);
       const ids = existing ? JSON.parse(existing) : [];
 
       if (ids.length === 0) {

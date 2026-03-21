@@ -32,7 +32,13 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      const { promotedGuestCount } = await login(email.trim(), password);
+      if (promotedGuestCount > 0) {
+        Alert.alert(
+          "Đã gộp yêu cầu",
+          `Đã chuyển ${promotedGuestCount} yêu cầu tạo khi chưa đăng nhập vào danh sách trên thiết bị này. Trên máy khác, các yêu cầu đó sẽ không hiển thị cùng tài khoản.`,
+        );
+      }
     } catch (e) {
       Alert.alert("Đăng nhập thất bại", e.message);
     } finally {

@@ -72,10 +72,15 @@ export default function MissionDetailScreen({ route, navigation }) {
   // Khởi tạo completed từ status thực tế của mission
   const isAlreadyCompleted = mission.status === "completed";
   const [completed, setCompleted] = useState(isAlreadyCompleted);
+  const [incompleteReported, setIncompleteReported] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [reportingIncomplete, setReportingIncomplete] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [completionNotes, setCompletionNotes] = useState("");
   const [completionMediaUris, setCompletionMediaUris] = useState([]);
+  const [incompleteReason, setIncompleteReason] = useState("");
+  const [incompleteMediaUris, setIncompleteMediaUris] = useState([]);
 
   const [myLocation, setMyLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
@@ -100,9 +105,12 @@ export default function MissionDetailScreen({ route, navigation }) {
     ? mission.media_urls.filter(Boolean)
     : [];
 
+  const missionActive =
+    mission.status === "on_mission" && !completed && !incompleteReported;
+
   useEffect(() => {
     // Chỉ load route nếu nhiệm vụ đang on_mission
-    if (hasGps && !isAlreadyCompleted) {
+    if (hasGps && missionActive) {
       initRouting();
     }
   }, []);
@@ -150,7 +158,7 @@ export default function MissionDetailScreen({ route, navigation }) {
     Linking.openURL("tel:" + mission.phone_number);
   };
 
-  const pickCompletionImages = async () => {
+  const pickReportImages = (setMediaUris) => {
     Alert.alert(
       "Chọn ảnh báo cáo",
       "Bạn muốn chụp ảnh mới hay chọn từ thư viện?",
@@ -170,7 +178,7 @@ export default function MissionDetailScreen({ route, navigation }) {
               allowsEditing: true,
             });
             if (!result.canceled && result.assets?.length) {
-              setCompletionMediaUris((prev) =>
+              setMediaUris((prev) =>
                 [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
               );
             }
@@ -191,7 +199,7 @@ export default function MissionDetailScreen({ route, navigation }) {
               quality: 0.8,
             });
             if (!result.canceled && result.assets?.length) {
-              setCompletionMediaUris((prev) =>
+              setMediaUris((prev) =>
                 [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
               );
             }
@@ -204,6 +212,10 @@ export default function MissionDetailScreen({ route, navigation }) {
 
   const removeCompletionImage = (index) => {
     setCompletionMediaUris((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeIncompleteImage = (index) => {
+    setIncompleteMediaUris((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmitComplete = async () => {
@@ -244,6 +256,48 @@ export default function MissionDetailScreen({ route, navigation }) {
     }
   };
 
+  const handleSubmitIncomplete = async () => {
+    if (isAlreadyCompleted || completed) {
+      Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành.");
+      setShowIncompleteModal(false);
+      return;
+    }
+    const reason = incompleteReason.trim();
+    if (!reason) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do không hoàn thành.");
+      return;
+    }
+
+    setReportingIncomplete(true);
+    try {
+      let imageUrls = [];
+      if (incompleteMediaUris.length > 0) {
+        const urls = await Promise.all(
+          incompleteMediaUris.map((uri) => uploadImage(uri)),
+        );
+        imageUrls = urls.filter(Boolean);
+      }
+      await missionsApi.reportIncomplete(mission.id, {
+        reason,
+        previousNotes: mission.notes || "",
+        imageUrls,
+      });
+      setShowIncompleteModal(false);
+      setIncompleteReason("");
+      setIncompleteMediaUris([]);
+      setIncompleteReported(true);
+      Alert.alert(
+        "Đã gửi báo cáo",
+        "Yêu cầu đã chuyển về trạng thái chờ điều phối xử lý lại. Điều phối viên sẽ xem lý do và ảnh trong ghi chú nhiệm vụ.",
+        [{ text: "OK", onPress: () => navigation.goBack() }],
+      );
+    } catch (e) {
+      Alert.alert("Lỗi", e.message);
+    } finally {
+      setReportingIncomplete(false);
+    }
+  };
+
   const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
 
   return (
@@ -258,23 +312,49 @@ export default function MissionDetailScreen({ route, navigation }) {
           style={[
             styles.statusBanner,
             {
-              backgroundColor: completed ? "#E8F5E9" : COLORS.primary + "15",
-              borderColor: completed ? "#388E3C30" : COLORS.primary + "30",
+              backgroundColor: completed
+                ? "#E8F5E9"
+                : incompleteReported
+                  ? "#FFF3E0"
+                  : COLORS.primary + "15",
+              borderColor: completed
+                ? "#388E3C30"
+                : incompleteReported
+                  ? "#F57C0040"
+                  : COLORS.primary + "30",
             },
           ]}
         >
           <MaterialIcons
-            name={completed ? "check-circle" : "local-shipping"}
+            name={
+              completed
+                ? "check-circle"
+                : incompleteReported
+                  ? "report-problem"
+                  : "local-shipping"
+            }
             size={24}
-            color={completed ? "#388E3C" : COLORS.primary}
+            color={
+              completed ? "#388E3C" : incompleteReported ? "#E65100" : COLORS.primary
+            }
           />
           <Text
             style={[
               styles.statusBannerText,
-              { color: completed ? "#388E3C" : COLORS.primary },
+              {
+                color: completed
+                  ? "#388E3C"
+                  : incompleteReported
+                    ? "#E65100"
+                    : COLORS.primary,
+              },
             ]}
           >
-            {completed ? "Nhiệm vụ đã hoàn thành" : "Đang thực hiện cứu hộ"}
+            {completed
+              ? "Nhiệm vụ đã hoàn thành"
+              : incompleteReported
+                ? "Đã báo cáo không hoàn thành"
+                : "Đang thực hiện cứu hộ"}
           </Text>
         </View>
 
@@ -552,26 +632,41 @@ export default function MissionDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Nút hoàn thành — CHỈ hiện khi on_mission và chưa completed */}
-        {!completed && mission.status === "on_mission" && (
-          <TouchableOpacity
-            style={[styles.completeBtn, completing && { opacity: 0.7 }]}
-            onPress={() => setShowCompleteModal(true)}
-            disabled={completing}
-          >
-            {completing ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <>
-                <MaterialIcons
-                  name="check-circle"
-                  size={24}
-                  color={COLORS.white}
-                />
-                <Text style={styles.completeBtnText}>Hoàn thành nhiệm vụ</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {/* Báo cáo nhiệm vụ — CHỈ khi đang on_mission */}
+        {!completed && !incompleteReported && mission.status === "on_mission" && (
+          <View style={styles.missionActions}>
+            <TouchableOpacity
+              style={[
+                styles.incompleteBtn,
+                (completing || reportingIncomplete) && { opacity: 0.7 },
+              ]}
+              onPress={() => setShowIncompleteModal(true)}
+              disabled={completing || reportingIncomplete}
+            >
+              <MaterialIcons name="cancel" size={22} color={COLORS.white} />
+              <Text style={styles.incompleteBtnText}>
+                Báo cáo không hoàn thành
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.completeBtn, completing && { opacity: 0.7 }]}
+              onPress={() => setShowCompleteModal(true)}
+              disabled={completing || reportingIncomplete}
+            >
+              {completing ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <>
+                  <MaterialIcons
+                    name="check-circle"
+                    size={24}
+                    color={COLORS.white}
+                  />
+                  <Text style={styles.completeBtnText}>Hoàn thành nhiệm vụ</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Banner đã hoàn thành */}
@@ -579,6 +674,15 @@ export default function MissionDetailScreen({ route, navigation }) {
           <View style={styles.completedBanner}>
             <MaterialIcons name="check-circle" size={32} color="#388E3C" />
             <Text style={styles.completedText}>Nhiệm vụ đã hoàn thành</Text>
+          </View>
+        )}
+
+        {incompleteReported && (
+          <View style={styles.incompleteBanner}>
+            <MaterialIcons name="report-problem" size={32} color="#E65100" />
+            <Text style={styles.incompleteBannerText}>
+              Đã gửi báo cáo không hoàn thành kèm lý do và ảnh
+            </Text>
           </View>
         )}
 
@@ -606,7 +710,7 @@ export default function MissionDetailScreen({ route, navigation }) {
               />
               <TouchableOpacity
                 style={styles.modalAddPhotoBtn}
-                onPress={pickCompletionImages}
+                onPress={() => pickReportImages(setCompletionMediaUris)}
               >
                 <MaterialIcons
                   name="add-photo-alternate"
@@ -660,6 +764,99 @@ export default function MissionDetailScreen({ route, navigation }) {
                   disabled={completing}
                 >
                   {completing ? (
+                    <ActivityIndicator color={COLORS.white} size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Gửi báo cáo</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal báo cáo không hoàn thành */}
+        <Modal
+          visible={showIncompleteModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() =>
+            !reportingIncomplete && setShowIncompleteModal(false)
+          }
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCompleteBox}>
+              <Text style={styles.modalCompleteTitle}>
+                Báo cáo không hoàn thành
+              </Text>
+              <Text style={styles.modalCompleteSub}>
+                Nêu lý do và đính kèm ảnh minh chứng (nếu có). Thông tin gửi cho
+                điều phối viên.
+              </Text>
+              <TextInput
+                style={styles.modalCompleteInput}
+                placeholder="Lý do (vd: Không tiếp cận được vị trí, đường ngập sâu...)"
+                value={incompleteReason}
+                onChangeText={setIncompleteReason}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={styles.modalAddPhotoBtn}
+                onPress={() => pickReportImages(setIncompleteMediaUris)}
+              >
+                <MaterialIcons
+                  name="add-photo-alternate"
+                  size={22}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.modalAddPhotoText}>Chọn ảnh báo cáo</Text>
+                {incompleteMediaUris.length > 0 && (
+                  <Text style={styles.modalPhotoCount}>
+                    {incompleteMediaUris.length + " ảnh"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {incompleteMediaUris.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.modalPhotoRow}
+                >
+                  {incompleteMediaUris.map((uri, index) => (
+                    <View key={index} style={styles.modalPhotoWrap}>
+                      <Image source={{ uri }} style={styles.modalPhoto} />
+                      <TouchableOpacity
+                        style={styles.modalPhotoRemove}
+                        onPress={() => removeIncompleteImage(index)}
+                      >
+                        <MaterialIcons
+                          name="close"
+                          size={14}
+                          color={COLORS.white}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              <View style={styles.modalCompleteActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowIncompleteModal(false)}
+                  disabled={reportingIncomplete}
+                >
+                  <Text style={styles.modalCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalIncompleteSubmitBtn,
+                    reportingIncomplete && { opacity: 0.7 },
+                  ]}
+                  onPress={handleSubmitIncomplete}
+                  disabled={reportingIncomplete}
+                >
+                  {reportingIncomplete ? (
                     <ActivityIndicator color={COLORS.white} size="small" />
                   ) : (
                     <Text style={styles.modalSubmitText}>Gửi báo cáo</Text>
@@ -853,6 +1050,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   timeText: { fontSize: 13, color: COLORS.text },
+  missionActions: { gap: 10, marginTop: 8 },
+  incompleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#E65100",
+    borderRadius: 14,
+    padding: 16,
+  },
+  incompleteBtnText: { color: COLORS.white, fontSize: 16, fontWeight: "800" },
   completeBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -861,7 +1069,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#388E3C",
     borderRadius: 14,
     padding: 18,
-    marginTop: 8,
   },
   completeBtnText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
   completedBanner: {
@@ -877,6 +1084,24 @@ const styles = StyleSheet.create({
     borderColor: "#388E3C30",
   },
   completedText: { color: "#388E3C", fontSize: 17, fontWeight: "800" },
+  incompleteBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#FFF3E0",
+    borderRadius: 14,
+    padding: 18,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#F57C0040",
+  },
+  incompleteBannerText: {
+    color: "#E65100",
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -949,6 +1174,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 10,
     backgroundColor: COLORS.primary,
+  },
+  modalIncompleteSubmitBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: "#E65100",
   },
   modalSubmitText: { fontSize: 14, color: COLORS.white, fontWeight: "700" },
   lightboxOverlay: {
