@@ -38,6 +38,26 @@ const TAB_COLORS = {
   bg: "rgba(255,255,255,0.95)",
 };
 
+const TAB_BAR_STYLE = {
+  borderTopWidth: 1,
+  borderTopColor: TAB_COLORS.border,
+  backgroundColor: TAB_COLORS.bg,
+  paddingBottom: 8,
+  paddingTop: 12,
+  height: 64,
+  elevation: 0,
+  shadowOpacity: 0,
+};
+
+const TAB_SCREEN_OPTIONS = {
+  headerShown: false,
+  tabBarActiveTintColor: TAB_COLORS.active,
+  tabBarInactiveTintColor: TAB_COLORS.inactive,
+  tabBarStyle: TAB_BAR_STYLE,
+  tabBarLabelStyle: { display: "none" },
+  tabBarShowLabel: false,
+};
+
 function TabBarIcon({ name, focused, label }) {
   const color = focused ? TAB_COLORS.active : TAB_COLORS.inactive;
   return (
@@ -67,6 +87,7 @@ const tabBarStyles = StyleSheet.create({
   labelActive: { fontWeight: "800" },
 });
 
+// ── Volunteer Stack ──────────────────────────────────────────────────────────
 function VolunteerTabStack() {
   return (
     <VolunteerStack.Navigator
@@ -95,75 +116,11 @@ function VolunteerTabStack() {
   );
 }
 
+// ── Main Tabs (user đã đăng nhập, role != rescue_team) ───────────────────────
 function MainTabs() {
   const { user } = useAuth();
   const isCitizen = user?.role === "user";
 
-// ── THÊM: MainTabs với campaign poster ──────────────────────────────────────
-function MainTabsNavigator() {
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: TAB_COLORS.active,
-        tabBarInactiveTintColor: TAB_COLORS.inactive,
-        tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: TAB_COLORS.border,
-          backgroundColor: TAB_COLORS.bg,
-          paddingBottom: 8,
-          paddingTop: 12,
-          height: 64,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        tabBarLabelStyle: { display: "none" },
-        tabBarShowLabel: false,
-      }}
-    >
-      <Tab.Screen
-        name="MyRequests"
-        component={MyRequestsScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabBarIcon name="assignment" focused={focused} label="Yêu cầu" />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="CreateRequest"
-        component={CreateRequestScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabBarIcon
-              name="add-circle"
-              focused={focused}
-              label="Tạo yêu cầu"
-            />
-          ),
-        }}
-      />
-      {isCitizen ? (
-        <Tab.Screen
-          name="Volunteer"
-          component={VolunteerTabStack}
-          options={{
-            tabBarLabel: "Tình nguyện",
-            tabBarIcon: ({ focused }) => (
-              <TabBarIcon
-                name="volunteer-activism"
-                focused={focused}
-                label="Tình nguyện"
-              />
-            ),
-          }}
-        />
-      ) : null}
-    </Tab.Navigator>
-  );
-}
-
-function MainTabs() {
   const [activeCampaign, setActiveCampaign] = useState(null);
   const [showPoster, setShowPoster] = useState(false);
 
@@ -184,7 +141,46 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
-      <MainTabsNavigator />
+      <Tab.Navigator screenOptions={TAB_SCREEN_OPTIONS}>
+        <Tab.Screen
+          name="MyRequests"
+          component={MyRequestsScreen}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon name="assignment" focused={focused} label="Yêu cầu" />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="CreateRequest"
+          component={CreateRequestScreen}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon
+                name="add-circle"
+                focused={focused}
+                label="Tạo yêu cầu"
+              />
+            ),
+          }}
+        />
+        {isCitizen ? (
+          <Tab.Screen
+            name="Volunteer"
+            component={VolunteerTabStack}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabBarIcon
+                  name="volunteer-activism"
+                  focused={focused}
+                  label="Tình nguyện"
+                />
+              ),
+            }}
+          />
+        ) : null}
+      </Tab.Navigator>
+
       {showPoster && activeCampaign && (
         <CampaignPoster
           campaign={activeCampaign}
@@ -194,29 +190,11 @@ function MainTabs() {
     </View>
   );
 }
-// ────────────────────────────────────────────────────────────────────────────
 
+// ── Guest Tabs ───────────────────────────────────────────────────────────────
 function GuestTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: TAB_COLORS.active,
-        tabBarInactiveTintColor: TAB_COLORS.inactive,
-        tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: TAB_COLORS.border,
-          backgroundColor: TAB_COLORS.bg,
-          paddingBottom: 8,
-          paddingTop: 12,
-          height: 64,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        tabBarLabelStyle: { display: "none" },
-        tabBarShowLabel: false,
-      }}
-    >
+    <Tab.Navigator screenOptions={TAB_SCREEN_OPTIONS}>
       <Tab.Screen
         name="CreateRequest"
         component={CreateRequestScreen}
@@ -252,27 +230,10 @@ function GuestTabs() {
   );
 }
 
+// ── Rescue Team Tabs ─────────────────────────────────────────────────────────
 function RescueTeamTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: TAB_COLORS.active,
-        tabBarInactiveTintColor: TAB_COLORS.inactive,
-        tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: TAB_COLORS.border,
-          backgroundColor: TAB_COLORS.bg,
-          paddingBottom: 8,
-          paddingTop: 12,
-          height: 64,
-          elevation: 0,
-          shadowOpacity: 0,
-        },
-        tabBarLabelStyle: { display: "none" },
-        tabBarShowLabel: false,
-      }}
-    >
+    <Tab.Navigator screenOptions={TAB_SCREEN_OPTIONS}>
       <Tab.Screen
         name="Missions"
         component={MissionsScreen}
@@ -308,6 +269,7 @@ function RescueTeamTabs() {
   );
 }
 
+// ── App Navigator (root) ─────────────────────────────────────────────────────
 export default function AppNavigator() {
   const { user, loading } = useAuth();
 
@@ -342,7 +304,6 @@ export default function AppNavigator() {
             </>
           ) : (
             <>
-              {/* THAY: dùng MainTabs mới có poster */}
               <Stack.Screen name="MainTabs" component={MainTabs} />
               <Stack.Screen
                 name="RequestDetail"
@@ -373,7 +334,10 @@ export default function AppNavigator() {
             <Stack.Screen
               name="MapPicker"
               component={MapPickerScreen}
-              options={{ headerShown: true, title: "Chọn vị trí trên bản đồ" }}
+              options={{
+                headerShown: true,
+                title: "Chọn vị trí trên bản đồ",
+              }}
             />
           </>
         )}
