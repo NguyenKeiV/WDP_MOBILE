@@ -32,7 +32,11 @@ apiClient.interceptors.response.use(
       error.response?.data?.message ||
       error.message ||
       "Đã có lỗi xảy ra";
-    return Promise.reject(new Error(message));
+    const normalizedError = new Error(message);
+    normalizedError.status = error.response?.status;
+    normalizedError.response = error.response;
+    normalizedError.code = error.code;
+    return Promise.reject(normalizedError);
   },
 );
 

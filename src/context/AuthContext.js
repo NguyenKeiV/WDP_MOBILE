@@ -1,27 +1,24 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApi } from "../api/auth";
 import { promoteGuestRequestIdsToDeviceUser } from "../utils/deviceGuestRequests";
 import {
   registerForPushNotifications,
   savePushTokenToServer,
+  configureNotificationActions,
 } from "../utils/pushNotification";
-import * as Notifications from "expo-notifications";
 
 const AuthContext = createContext(null);
+
+const PUSH_FALLBACK_TEXT =
+  "Chưa đăng ký nhận thông báo. Vui lòng đăng nhập lại.";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  const notificationListener = useRef();
-  const responseListener = useRef();
+  const [pushReady, setPushReady] = useState(false);
+  const [pushFallbackMessage, setPushFallbackMessage] = useState("");
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -32,10 +29,8 @@ export const AuthProvider = ({ children }) => {
           setToken(savedToken);
           const parsedUser = JSON.parse(savedUser);
           setUser(parsedUser);
-          // Đăng ký push token lại khi khởi động app
-          if (parsedUser.role === "rescue_team") {
-            registerAndSavePushToken();
-          }
+          configureNotificationActions();
+          registerAndSavePushToken();
         }
       } catch (e) {
         await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
@@ -44,35 +39,36 @@ export const AuthProvider = ({ children }) => {
       }
     };
     bootstrap();
-
-    // Lắng nghe notification khi app đang mở
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        console.log("📬 Notification received:", notification);
-      });
-
-    // Lắng nghe khi user bấm vào notification
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-        console.log("👆 Notification tapped:", data);
-      });
-
-    return () => {
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
-    };
   }, []);
 
   const registerAndSavePushToken = async () => {
     try {
-      const pushToken = await registerForPushNotifications();
-      if (pushToken) {
-        await savePushTokenToServer(pushToken);
-        console.log("✅ Push token saved:", pushToken);
+      const registration = await registerForPushNotifications();
+      if (!registration?.ok || !registration?.token) {
+        const reason = registration?.reason || "Cannot register push token";
+        console.log("⚠️ Push registration skipped:", reason);
+        setPushReady(false);
+        setPushFallbackMessage(PUSH_FALLBACK_TEXT);
+        return false;
       }
+
+      const saveResult = await savePushTokenToServer(registration.token);
+      if (!saveResult?.ok) {
+        console.log("⚠️ Push token save skipped:", saveResult?.reason);
+        setPushReady(false);
+        setPushFallbackMessage(PUSH_FALLBACK_TEXT);
+        return false;
+      }
+
+      setPushReady(true);
+      setPushFallbackMessage("");
+      console.log("✅ Push token saved:", registration.token);
+      return true;
     } catch (e) {
       console.error("Failed to register push token:", e);
+      setPushReady(false);
+      setPushFallbackMessage(PUSH_FALLBACK_TEXT);
+      return false;
     }
   };
 
@@ -83,6 +79,7 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem("auth_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    configureNotificationActions();
 
     let promotedGuestCount = 0;
     if (newUser.role === "user") {
@@ -95,10 +92,8 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // Đăng ký push token cho rescue_team
-    if (newUser.role === "rescue_team") {
-      setTimeout(() => registerAndSavePushToken(), 1000);
-    }
+    // Đăng ký push token cho user đã đăng nhập
+    setTimeout(() => registerAndSavePushToken(), 300);
 
     return { user: newUser, promotedGuestCount };
   };
@@ -112,11 +107,22 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
     setToken(null);
     setUser(null);
+    setPushReady(false);
+    setPushFallbackMessage("");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout }}
+      value={{
+        user,
+        token,
+        loading,
+        login,
+        register,
+        logout,
+        pushReady,
+        pushFallbackMessage,
+      }}
     >
       {children}
     </AuthContext.Provider>
