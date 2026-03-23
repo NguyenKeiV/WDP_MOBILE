@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -7,6 +7,8 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { useAuth } from "../context/AuthContext";
 import { COLORS } from "../constants";
+import { charityCampaignApi } from "../api/charityCampaign";
+import CampaignPoster from "../components/CampaignPoster";
 
 import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
@@ -51,23 +53,18 @@ function TabBarIcon({ name, focused, label }) {
 }
 
 const tabBarStyles = StyleSheet.create({
-  tabItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
+  tabItem: { alignItems: "center", justifyContent: "center", gap: 2 },
   label: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-  labelActive: {
-    fontWeight: "800",
-  },
+  labelActive: { fontWeight: "800" },
 });
 
-function MainTabs() {
+// ── THÊM: MainTabs với campaign poster ──────────────────────────────────────
+function MainTabsNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -92,7 +89,6 @@ function MainTabs() {
         name="MyRequests"
         component={MyRequestsScreen}
         options={{
-          tabBarLabel: "Yêu cầu của tôi",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="assignment" focused={focused} label="Yêu cầu" />
           ),
@@ -102,15 +98,51 @@ function MainTabs() {
         name="CreateRequest"
         component={CreateRequestScreen}
         options={{
-          tabBarLabel: "Tạo yêu cầu",
           tabBarIcon: ({ focused }) => (
-            <TabBarIcon name="add-circle" focused={focused} label="Tạo yêu cầu" />
+            <TabBarIcon
+              name="add-circle"
+              focused={focused}
+              label="Tạo yêu cầu"
+            />
           ),
         }}
       />
     </Tab.Navigator>
   );
 }
+
+function MainTabs() {
+  const [activeCampaign, setActiveCampaign] = useState(null);
+  const [showPoster, setShowPoster] = useState(false);
+
+  useEffect(() => {
+    const fetchCampaign = async () => {
+      try {
+        const res = await charityCampaignApi.getActive();
+        if (res?.data) {
+          setActiveCampaign(res.data);
+          setShowPoster(true);
+        }
+      } catch {
+        // Không có campaign active → không hiện gì
+      }
+    };
+    fetchCampaign();
+  }, []);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <MainTabsNavigator />
+      {showPoster && activeCampaign && (
+        <CampaignPoster
+          campaign={activeCampaign}
+          onClose={() => setShowPoster(false)}
+        />
+      )}
+    </View>
+  );
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 function GuestTabs() {
   return (
@@ -137,9 +169,12 @@ function GuestTabs() {
         name="CreateRequest"
         component={CreateRequestScreen}
         options={{
-          tabBarLabel: "Tạo yêu cầu",
           tabBarIcon: ({ focused }) => (
-            <TabBarIcon name="add-circle" focused={focused} label="Tạo yêu cầu" />
+            <TabBarIcon
+              name="add-circle"
+              focused={focused}
+              label="Tạo yêu cầu"
+            />
           ),
         }}
       />
@@ -147,7 +182,6 @@ function GuestTabs() {
         name="GuestRequests"
         component={GuestRequestsScreen}
         options={{
-          tabBarLabel: "Của tôi",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="list" focused={focused} label="Của tôi" />
           ),
@@ -157,7 +191,6 @@ function GuestTabs() {
         name="LoginPrompt"
         component={LoginScreen}
         options={{
-          tabBarLabel: "Đăng nhập",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="person" focused={focused} label="Đăng nhập" />
           ),
@@ -192,7 +225,6 @@ function RescueTeamTabs() {
         name="Missions"
         component={MissionsScreen}
         options={{
-          tabBarLabel: "Nhiệm vụ",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="assignment" focused={focused} label="Nhiệm vụ" />
           ),
@@ -202,7 +234,6 @@ function RescueTeamTabs() {
         name="Inventory"
         component={InventoryScreen}
         options={{
-          tabBarLabel: "Kiểm kê",
           tabBarIcon: ({ focused }) => (
             <TabBarIcon name="inventory-2" focused={focused} label="Kiểm kê" />
           ),
@@ -212,9 +243,12 @@ function RescueTeamTabs() {
         name="VehicleReturn"
         component={VehicleReturnScreen}
         options={{
-          tabBarLabel: "Thu hồi xe",
           tabBarIcon: ({ focused }) => (
-            <TabBarIcon name="local-shipping" focused={focused} label="Thu hồi xe" />
+            <TabBarIcon
+              name="local-shipping"
+              focused={focused}
+              label="Thu hồi xe"
+            />
           ),
         }}
       />
@@ -256,6 +290,7 @@ export default function AppNavigator() {
             </>
           ) : (
             <>
+              {/* THAY: dùng MainTabs mới có poster */}
               <Stack.Screen name="MainTabs" component={MainTabs} />
               <Stack.Screen
                 name="RequestDetail"
