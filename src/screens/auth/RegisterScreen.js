@@ -47,7 +47,17 @@ export default function RegisterScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await register(username.trim(), email.trim(), password);
+      const { promotedGuestCount } = await register(
+        username.trim(),
+        email.trim(),
+        password,
+      );
+      if (promotedGuestCount > 0) {
+        Alert.alert(
+          "Đã gộp yêu cầu",
+          `Đã chuyển ${promotedGuestCount} yêu cầu tạo khi chưa đăng nhập vào danh sách trên thiết bị này. Trên máy khác, các yêu cầu đó sẽ không hiển thị cùng tài khoản.`,
+        );
+      }
     } catch (e) {
       Alert.alert("Đăng ký thất bại", e.message);
     } finally {
