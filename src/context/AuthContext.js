@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApi } from "../api/auth";
-import { requestsApi } from "../api/requests";
+import { promoteGuestRequestIdsToDeviceUser } from "../utils/deviceGuestRequests";
 import {
   registerForPushNotifications,
   savePushTokenToServer,
@@ -83,18 +83,16 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem("auth_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
-    // Gắn yêu cầu tạo lúc guest vào tài khoản vừa đăng nhập
-    try {
-      const guestIds = await AsyncStorage.getItem("guest_request_ids");
-      if (guestIds) {
-        const ids = JSON.parse(guestIds);
-        if (ids && ids.length > 0) {
-          await requestsApi.linkToMe(ids);
-          await AsyncStorage.removeItem("guest_request_ids");
-        }
+
+    let promotedGuestCount = 0;
+    if (newUser.role === "user") {
+      try {
+        promotedGuestCount = await promoteGuestRequestIdsToDeviceUser(
+          newUser.id,
+        );
+      } catch (e) {
+        console.warn("Promote guest requests to device user:", e?.message || e);
       }
-    } catch (e) {
-      // Không chặn login nếu link thất bại
     }
 
     // Đăng ký push token cho rescue_team
@@ -102,7 +100,7 @@ export const AuthProvider = ({ children }) => {
       setTimeout(() => registerAndSavePushToken(), 1000);
     }
 
-    return newUser;
+    return { user: newUser, promotedGuestCount };
   };
 
   const register = async (username, email, password) => {

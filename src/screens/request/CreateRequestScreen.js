@@ -24,6 +24,7 @@ import MapView, { Marker } from "react-native-maps";
 import { uploadImage } from "../../api/upload";
 import { useAuth } from "../../context/AuthContext";
 import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
+import { GUEST_REQUEST_IDS_KEY } from "../../utils/deviceGuestRequests";
 
 const CATEGORY_CONFIG = {
   rescue: {
@@ -218,11 +219,11 @@ export default function CreateRequestScreen({ navigation }) {
       // Chỉ lưu local khi là guest
       if (!user) {
         const newId = res.data.id;
-        const existing = await AsyncStorage.getItem("guest_request_ids");
+        const existing = await AsyncStorage.getItem(GUEST_REQUEST_IDS_KEY);
         const ids = existing ? JSON.parse(existing) : [];
         ids.unshift(newId);
         await AsyncStorage.setItem(
-          "guest_request_ids",
+          GUEST_REQUEST_IDS_KEY,
           JSON.stringify(ids.slice(0, 50)),
         );
       }

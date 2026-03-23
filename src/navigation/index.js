@@ -22,9 +22,13 @@ import MissionDetailScreen from "../screens/missions/MissionDetailScreen";
 import InventoryScreen from "../screens/rescue/InventoryScreen";
 import VehicleReturnScreen from "../screens/rescue/VehicleReturnScreen";
 import MapPickerScreen from "../screens/request/MapPickerScreen";
+import VolunteerListScreen from "../screens/volunteer/VolunteerListScreen";
+import VolunteerRegisterScreen from "../screens/volunteer/VolunteerRegisterScreen";
+import VolunteerDetailScreen from "../screens/volunteer/VolunteerDetailScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const VolunteerStack = createNativeStackNavigator();
 
 const TAB_COLORS = {
   primary: COLORS.primary,
@@ -62,6 +66,38 @@ const tabBarStyles = StyleSheet.create({
   },
   labelActive: { fontWeight: "800" },
 });
+
+function VolunteerTabStack() {
+  return (
+    <VolunteerStack.Navigator
+      screenOptions={{
+        headerTintColor: COLORS.primary,
+        headerTitleStyle: { fontWeight: "700" },
+        headerShadowVisible: false,
+      }}
+    >
+      <VolunteerStack.Screen
+        name="VolunteerList"
+        component={VolunteerListScreen}
+        options={{ headerShown: false }}
+      />
+      <VolunteerStack.Screen
+        name="VolunteerRegister"
+        component={VolunteerRegisterScreen}
+        options={{ title: "Đăng ký tình nguyện" }}
+      />
+      <VolunteerStack.Screen
+        name="VolunteerDetail"
+        component={VolunteerDetailScreen}
+        options={{ title: "Chi tiết đăng ký" }}
+      />
+    </VolunteerStack.Navigator>
+  );
+}
+
+function MainTabs() {
+  const { user } = useAuth();
+  const isCitizen = user?.role === "user";
 
 // ── THÊM: MainTabs với campaign poster ──────────────────────────────────────
 function MainTabsNavigator() {
@@ -107,6 +143,22 @@ function MainTabsNavigator() {
           ),
         }}
       />
+      {isCitizen ? (
+        <Tab.Screen
+          name="Volunteer"
+          component={VolunteerTabStack}
+          options={{
+            tabBarLabel: "Tình nguyện",
+            tabBarIcon: ({ focused }) => (
+              <TabBarIcon
+                name="volunteer-activism"
+                focused={focused}
+                label="Tình nguyện"
+              />
+            ),
+          }}
+        />
+      ) : null}
     </Tab.Navigator>
   );
 }

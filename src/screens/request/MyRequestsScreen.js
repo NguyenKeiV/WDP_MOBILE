@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -14,6 +15,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { useAuth } from "../../context/AuthContext";
 import { requestsApi } from "../../api/requests";
+import { getDeviceLinkedRequestIds } from "../../utils/deviceGuestRequests";
 import { STATUS_CONFIG, CATEGORIES } from "../../constants";
 
 const C = {
@@ -198,7 +200,36 @@ export default function MyRequestsScreen({ navigation }) {
         const params = { limit: 50 };
         if (status) params.status = status;
         const res = await requestsApi.getMyRequests(user.id, params);
-        setRequests(res.data || []);
+        let list = Array.isArray(res.data) ? res.data : [];
+
+        const deviceIds = await getDeviceLinkedRequestIds(user.id);
+        const seen = new Set(list.map((r) => r.id));
+        const toFetch = deviceIds.filter((id) => id && !seen.has(id));
+
+        if (toFetch.length > 0) {
+          const settled = await Promise.allSettled(
+            toFetch.map((id) =>
+              requestsApi.getById(id).then((r) => r?.data ?? null),
+            ),
+          );
+          for (const s of settled) {
+            if (s.status !== "fulfilled" || !s.value) continue;
+            const item = s.value;
+            if (!item?.id || seen.has(item.id)) continue;
+            seen.add(item.id);
+            list.push(item);
+          }
+        }
+
+        if (status) {
+          list = list.filter((r) => r.status === status);
+        }
+
+        list.sort(
+          (a, b) =>
+            new Date(b.created_at || 0) - new Date(a.created_at || 0),
+        );
+        setRequests(list);
       } catch (e) {
         console.error(e);
       }
@@ -206,14 +237,19 @@ export default function MyRequestsScreen({ navigation }) {
     [user.id, statusFilter],
   );
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await fetchMyRequests(statusFilter);
-      setLoading(false);
-    };
-    init();
-  }, [statusFilter]);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        setLoading(true);
+        await fetchMyRequests(statusFilter);
+        if (active) setLoading(false);
+      })();
+      return () => {
+        active = false;
+      };
+    }, [fetchMyRequests, statusFilter]),
+  );
 
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn chắc chắn muốn đăng xuất?", [
