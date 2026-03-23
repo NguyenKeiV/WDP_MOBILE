@@ -1,22 +1,25 @@
-import * as volunteerLocal from "../services/volunteerLocal";
+import apiClient from "./client";
 
 /**
- * Lớp gọi dữ liệu tình nguyện — hiện dùng AsyncStorage (demo / prototype).
- * Khi backend sẵn sàng: thay nội dung bằng apiClient (GET/POST/PATCH) và giữ
- * cùng tên hàm + shape { data } để màn hình ít đổi nhất.
+ * Đăng ký tình nguyện — nối API backend.
+ * Base path: /volunteer-registrations
  */
-
-export async function fetchMyVolunteerRegistrations(userId) {
-  const data = await volunteerLocal.listForUser(userId);
-  return { data };
+export async function fetchMyVolunteerRegistrations(_userId) {
+  const res = await apiClient.get("/volunteer-registrations/me");
+  return { data: res.data ?? [] };
 }
 
-export async function fetchVolunteerRegistrationById(userId, id) {
-  const data = await volunteerLocal.getByIdForUser(userId, id);
-  return { data };
+export async function fetchVolunteerRegistrationById(_userId, id) {
+  const res = await apiClient.get(`/volunteer-registrations/${id}`);
+  return { data: res.data };
 }
 
-export async function createVolunteerRegistration(userId, body) {
-  const data = await volunteerLocal.createForUser(userId, body);
-  return { data };
+export async function createVolunteerRegistration(_userId, body) {
+  const { support_type, district, note } = body;
+  const res = await apiClient.post("/volunteer-registrations", {
+    support_type,
+    district,
+    note: note ?? null,
+  });
+  return { data: res.data };
 }

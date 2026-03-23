@@ -54,7 +54,7 @@ export default function VolunteerRegisterScreen({ navigation }) {
         district,
         note: note.trim() || null,
       });
-      Alert.alert("Đã gửi", "Đăng ký tình nguyện đã được lưu (bản demo trên máy).", [
+      Alert.alert("Đã gửi", "Đăng ký tình nguyện đã được gửi lên hệ thống.", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (e) {

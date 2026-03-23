@@ -44,8 +44,12 @@ export default function VolunteerListScreen({ navigation }) {
 
   const load = useCallback(async () => {
     if (!user?.id) return;
-    const res = await fetchMyVolunteerRegistrations(user.id);
-    setItems(res.data || []);
+    try {
+      const res = await fetchMyVolunteerRegistrations(user.id);
+      setItems(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setItems([]);
+    }
   }, [user?.id]);
 
   useFocusEffect(
@@ -93,9 +97,8 @@ export default function VolunteerListScreen({ navigation }) {
         <View style={styles.notice}>
           <MaterialIcons name="info-outline" size={18} color={C.primary} />
           <Text style={styles.noticeText}>
-            Giao diện mẫu — dữ liệu lưu trên máy. Khi có API backend, chỉ cần
-            nối lớp gọi trong{" "}
-            <Text style={styles.noticeMono}>src/api/volunteer.js</Text>.
+            Đăng ký được lưu trên server. Trạng thái duyệt / phản hồi điều phối sẽ
+            cập nhật khi hệ thống xử lý.
           </Text>
         </View>
 
@@ -181,7 +184,6 @@ const styles = StyleSheet.create({
     borderColor: "#BBDEFB",
   },
   noticeText: { flex: 1, fontSize: 12, color: C.text, lineHeight: 18 },
-  noticeMono: { fontFamily: "monospace", fontSize: 11, color: C.primary },
   centered: { paddingVertical: 48, alignItems: "center" },
   empty: {
     alignItems: "center",

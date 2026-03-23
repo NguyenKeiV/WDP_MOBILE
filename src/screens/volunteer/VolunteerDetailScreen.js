@@ -31,8 +31,12 @@ export default function VolunteerDetailScreen({ route }) {
 
   const load = useCallback(async () => {
     if (!user?.id || !id) return;
-    const res = await fetchVolunteerRegistrationById(user.id, id);
-    setItem(res.data);
+    try {
+      const res = await fetchVolunteerRegistrationById(user.id, id);
+      setItem(res.data ?? null);
+    } catch {
+      setItem(null);
+    }
   }, [user?.id, id]);
 
   useEffect(() => {
@@ -116,8 +120,7 @@ export default function VolunteerDetailScreen({ route }) {
         <View style={styles.footerHint}>
           <MaterialIcons name="build" size={16} color={C.textMuted} />
           <Text style={styles.footerHintText}>
-            Màn hình chi tiết tương thích với dữ liệu từ API (trạng thái, ghi chú
-            điều phối) sau khi tích hợp BE.
+            Phản hồi điều phối cập nhật khi điều phối xử lý trên hệ thống quản trị.
           </Text>
         </View>
       </ScrollView>

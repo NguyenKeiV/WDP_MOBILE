@@ -279,8 +279,7 @@ export default function MissionDetailScreen({ route, navigation }) {
       }
       await missionsApi.reportIncomplete(mission.id, {
         reason,
-        previousNotes: mission.notes || "",
-        imageUrls,
+        failure_media_urls: imageUrls,
       });
       setShowIncompleteModal(false);
       setIncompleteReason("");
@@ -288,7 +287,7 @@ export default function MissionDetailScreen({ route, navigation }) {
       setIncompleteReported(true);
       Alert.alert(
         "Đã gửi báo cáo",
-        "Yêu cầu đã chuyển về trạng thái chờ điều phối xử lý lại. Điều phối viên sẽ xem lý do và ảnh trong ghi chú nhiệm vụ.",
+        "Yêu cầu đã chuyển về chờ điều phối. Điều phối viên nhận thông báo và xem lý do / ảnh trên hệ thống.",
         [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     } catch (e) {
