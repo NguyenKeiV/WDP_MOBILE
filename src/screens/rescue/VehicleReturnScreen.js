@@ -15,6 +15,7 @@ import {
 } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { vehicleRequestsApi } from "../../api/vehicleRequests";
+import { missionsApi } from "../../api/missions";
 import { COLORS } from "../../constants";
 
 const VEHICLE_TYPE_LABELS = {
@@ -66,12 +67,10 @@ function VehicleRequestCard({ item, onReturn, returning }) {
   const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
   const typeIcon = VEHICLE_TYPE_ICONS[item.vehicle_type] || "commute";
   const typeLabel = VEHICLE_TYPE_LABELS[item.vehicle_type] || item.vehicle_type;
-
   const assignedVehicles = item.assigned_vehicles || [];
 
   return (
     <View style={styles.card}>
-      {/* Header */}
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
           <View style={styles.typeIconWrap}>
@@ -96,7 +95,6 @@ function VehicleRequestCard({ item, onReturn, returning }) {
         </View>
       </View>
 
-      {/* Lý do */}
       <View style={styles.reasonRow}>
         <MaterialIcons name="info-outline" size={14} color={COLORS.textLight} />
         <Text style={styles.reasonText} numberOfLines={2}>
@@ -104,7 +102,6 @@ function VehicleRequestCard({ item, onReturn, returning }) {
         </Text>
       </View>
 
-      {/* Xe được gán */}
       {assignedVehicles.length > 0 && (
         <View style={styles.vehicleList}>
           <Text style={styles.vehicleListTitle}>Xe được cấp:</Text>
@@ -133,12 +130,10 @@ function VehicleRequestCard({ item, onReturn, returning }) {
         </View>
       )}
 
-      {/* Thời gian */}
       <Text style={styles.timeText}>
         {"Tạo lúc: " + new Date(item.created_at).toLocaleString("vi-VN")}
       </Text>
 
-      {/* Nút trả xe — chỉ hiện khi approved */}
       {item.status === "approved" && (
         <TouchableOpacity
           style={[styles.returnBtn, returning && { opacity: 0.7 }]}
@@ -161,7 +156,6 @@ function VehicleRequestCard({ item, onReturn, returning }) {
         </TouchableOpacity>
       )}
 
-      {/* Banner đã trả */}
       {item.status === "returned" && (
         <View style={styles.returnedBanner}>
           <MaterialIcons name="check-circle" size={18} color="#388E3C" />
@@ -178,13 +172,37 @@ export default function VehicleReturnScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [returningId, setReturningId] = useState(null);
+  const [myTeamId, setMyTeamId] = useState(null);
+  const [myTeamName, setMyTeamName] = useState("");
+  const [fetchError, setFetchError] = useState(null);
 
+  // ── Sửa: lấy team_id từ endpoint missions trước, rồi mới filter vehicle requests
   const fetchRequests = useCallback(async () => {
     try {
-      // Lấy cả approved và returned để team xem lịch sử
+      setFetchError(null);
+
+      // Bước 1: lấy thông tin team của rescue_team đang đăng nhập
+      let teamId = myTeamId;
+      let teamName = myTeamName;
+
+      if (!teamId) {
+        const missionRes = await missionsApi.getMyTeamMissions();
+        const team = missionRes?.data?.team;
+        if (!team?.id) {
+          setFetchError("Tài khoản chưa được liên kết với đội nào.");
+          setRequests([]);
+          return;
+        }
+        teamId = team.id;
+        teamName = team.name || "";
+        setMyTeamId(teamId);
+        setMyTeamName(teamName);
+      }
+
+      // Bước 2: lấy vehicle requests của team mình (approved + returned)
       const [approvedRes, returnedRes] = await Promise.allSettled([
-        vehicleRequestsApi.getAll({ status: "approved" }),
-        vehicleRequestsApi.getAll({ status: "returned" }),
+        vehicleRequestsApi.getAll({ status: "approved", team_id: teamId }),
+        vehicleRequestsApi.getAll({ status: "returned", team_id: teamId }),
       ]);
 
       const approved =
@@ -200,8 +218,9 @@ export default function VehicleReturnScreen() {
       setRequests(all);
     } catch (e) {
       console.error("fetchRequests error:", e.message);
+      setFetchError("Không thể tải danh sách phương tiện. Vui lòng thử lại.");
     }
-  }, []);
+  }, [myTeamId, myTeamName]);
 
   useEffect(() => {
     const init = async () => {
@@ -241,7 +260,6 @@ export default function VehicleReturnScreen() {
     setReturningId(requestId);
     try {
       await vehicleRequestsApi.reportReturn(requestId);
-      // Cập nhật local state ngay lập tức
       setRequests((prev) =>
         prev.map((r) =>
           r.id === requestId ? { ...r, status: "returned" } : r,
@@ -263,7 +281,6 @@ export default function VehicleReturnScreen() {
 
   const approvedCount = requests.filter((r) => r.status === "approved").length;
   const returnedCount = requests.filter((r) => r.status === "returned").length;
-
   const paddingBottom = (insets.bottom || 24) + 24;
 
   if (loading) {
@@ -292,30 +309,39 @@ export default function VehicleReturnScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>Quản lý phương tiện</Text>
+            {myTeamName ? (
+              <Text style={styles.teamNameText}>Đội: {myTeamName}</Text>
+            ) : null}
             <Text style={styles.subtitle}>
               Báo cáo trả xe sau khi hoàn thành nhiệm vụ
             </Text>
 
-            {/* Stats */}
-            <View style={styles.statsRow}>
-              <View
-                style={[
-                  styles.statCard,
-                  { backgroundColor: COLORS.primary + "15" },
-                ]}
-              >
-                <Text style={[styles.statNum, { color: COLORS.primary }]}>
-                  {approvedCount}
-                </Text>
-                <Text style={styles.statLabel}>Đang sử dụng</Text>
+            {fetchError ? (
+              <View style={styles.errorBanner}>
+                <MaterialIcons name="error-outline" size={16} color="#B71C1C" />
+                <Text style={styles.errorText}>{fetchError}</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: "#E8F5E9" }]}>
-                <Text style={[styles.statNum, { color: "#388E3C" }]}>
-                  {returnedCount}
-                </Text>
-                <Text style={styles.statLabel}>Đã trả</Text>
+            ) : (
+              <View style={styles.statsRow}>
+                <View
+                  style={[
+                    styles.statCard,
+                    { backgroundColor: COLORS.primary + "15" },
+                  ]}
+                >
+                  <Text style={[styles.statNum, { color: COLORS.primary }]}>
+                    {approvedCount}
+                  </Text>
+                  <Text style={styles.statLabel}>Đang sử dụng</Text>
+                </View>
+                <View style={[styles.statCard, { backgroundColor: "#E8F5E9" }]}>
+                  <Text style={[styles.statNum, { color: "#388E3C" }]}>
+                    {returnedCount}
+                  </Text>
+                  <Text style={styles.statLabel}>Đã trả</Text>
+                </View>
               </View>
-            </View>
+            )}
 
             {approvedCount > 0 && (
               <View style={styles.alertBanner}>
@@ -329,19 +355,23 @@ export default function VehicleReturnScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <View style={styles.emptyIconWrap}>
-              <MaterialIcons
-                name="local-shipping"
-                size={48}
-                color={COLORS.gray}
-              />
+          !fetchError ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIconWrap}>
+                <MaterialIcons
+                  name="local-shipping"
+                  size={48}
+                  color={COLORS.gray}
+                />
+              </View>
+              <Text style={styles.emptyTitle}>
+                Không có yêu cầu phương tiện
+              </Text>
+              <Text style={styles.emptyText}>
+                Các yêu cầu phương tiện của đội sẽ xuất hiện ở đây
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>Không có yêu cầu phương tiện</Text>
-            <Text style={styles.emptyText}>
-              Các yêu cầu phương tiện của đội sẽ xuất hiện ở đây
-            </Text>
-          </View>
+          ) : null
         }
         refreshControl={
           <RefreshControl
@@ -373,9 +403,28 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "800",
     color: COLORS.black,
+    marginBottom: 2,
+  },
+  teamNameText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "600",
     marginBottom: 4,
   },
   subtitle: { fontSize: 14, color: COLORS.textLight, marginBottom: 16 },
+
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFEBEE",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#EF9A9A",
+    marginBottom: 12,
+  },
+  errorText: { fontSize: 13, color: "#B71C1C", flex: 1, lineHeight: 18 },
 
   statsRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
   statCard: {
