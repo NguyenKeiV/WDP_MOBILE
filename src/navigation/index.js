@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Text, ActivityIndicator, View, StyleSheet } from "react-native";
+import { Text, ActivityIndicator, View, StyleSheet, Alert } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Notifications from "expo-notifications";
 
 import { useAuth } from "../context/AuthContext";
 import { COLORS } from "../constants";
 import { charityCampaignApi } from "../api/charityCampaign";
 import CampaignPoster from "../components/CampaignPoster";
+import CharityCampaignDetailScreen from "../screens/charity/CharityCampaignDetailScreen";
+import CharityDonationHistoryScreen from "../screens/charity/CharityDonationHistoryScreen";
+import { CHARITY_NOTIFICATION_CATEGORY_ID } from "../utils/pushNotification";
 
 import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
@@ -29,6 +36,7 @@ import VolunteerDetailScreen from "../screens/volunteer/VolunteerDetailScreen";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const VolunteerStack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
 
 const TAB_COLORS = {
   primary: COLORS.primary,
@@ -57,6 +65,47 @@ const TAB_SCREEN_OPTIONS = {
   tabBarLabelStyle: { display: "none" },
   tabBarShowLabel: false,
 };
+
+function isCharityCampaignPayload(data) {
+  if (!data || typeof data !== "object") return false;
+  return data.type === "charity_campaign";
+}
+
+function resolveCampaignId(data) {
+  if (!data || typeof data !== "object") return null;
+  return data.campaign_id || data.campaignId || data.id || null;
+}
+
+async function buildCampaignNotificationBody(campaignId) {
+  if (!campaignId) {
+    return "Hãy xem chi tiết đợt quyên góp mới để tham gia.";
+  }
+
+  try {
+    const res = await charityCampaignApi.getById(campaignId);
+    const name = res?.data?.name;
+    if (name) {
+      return `Đợt quyên góp: ${name}`;
+    }
+  } catch {
+    // ignore and fallback text
+  }
+
+  return "Hãy xem chi tiết đợt quyên góp mới để tham gia.";
+}
+
+function openCharityCampaignDetail(campaignId) {
+  if (!campaignId) {
+    Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+    return;
+  }
+
+  if (!navigationRef.isReady()) return;
+
+  navigationRef.navigate("CharityCampaignDetail", {
+    campaign_id: campaignId,
+  });
+}
 
 function TabBarIcon({ name, focused, label }) {
   const color = focused ? TAB_COLORS.active : TAB_COLORS.inactive;
@@ -118,7 +167,7 @@ function VolunteerTabStack() {
 
 // ── Main Tabs (user đã đăng nhập, role != rescue_team) ───────────────────────
 function MainTabs() {
-  const { user } = useAuth();
+  const { user, pushReady, pushFallbackMessage } = useAuth();
   const isCitizen = user?.role === "user";
 
   const [activeCampaign, setActiveCampaign] = useState(null);
@@ -141,6 +190,13 @@ function MainTabs() {
 
   return (
     <View style={{ flex: 1 }}>
+      {!pushReady && !!pushFallbackMessage ? (
+        <View style={styles.pushFallbackBox}>
+          <MaterialIcons name="notifications-off" size={16} color="#92400E" />
+          <Text style={styles.pushFallbackText}>{pushFallbackMessage}</Text>
+        </View>
+      ) : null}
+
       <Tab.Navigator screenOptions={TAB_SCREEN_OPTIONS}>
         <Tab.Screen
           name="MyRequests"
@@ -271,7 +327,77 @@ function RescueTeamTabs() {
 
 // ── App Navigator (root) ─────────────────────────────────────────────────────
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, pushReady } = useAuth();
+  const receivedListener = useRef(null);
+  const responseListener = useRef(null);
+  const pendingCampaignIdRef = useRef(null);
+
+  const handleNotificationDeepLink = useCallback((data) => {
+    if (!isCharityCampaignPayload(data)) return;
+
+    const campaignId = resolveCampaignId(data);
+    if (!campaignId) {
+      Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+      return;
+    }
+
+    if (!navigationRef.isReady()) {
+      pendingCampaignIdRef.current = campaignId;
+      return;
+    }
+
+    openCharityCampaignDetail(campaignId);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !pushReady) {
+      console.log("ℹ️ Skip notification listeners: push token chưa sẵn sàng");
+      return undefined;
+    }
+
+    receivedListener.current = Notifications.addNotificationReceivedListener(
+      async (notification) => {
+        const data = notification?.request?.content?.data;
+        if (!isCharityCampaignPayload(data)) return;
+
+        const campaignId = resolveCampaignId(data);
+        if (!campaignId) {
+          Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+          return;
+        }
+
+        const body = await buildCampaignNotificationBody(campaignId);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Có đợt quyên góp mới",
+            body,
+            data: {
+              type: "charity_campaign",
+              campaign_id: campaignId,
+            },
+            categoryIdentifier: CHARITY_NOTIFICATION_CATEGORY_ID,
+          },
+          trigger: null,
+        });
+      },
+    );
+
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response?.notification?.request?.content?.data;
+        handleNotificationDeepLink(data);
+      });
+
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const data = response?.notification?.request?.content?.data;
+      handleNotificationDeepLink(data);
+    });
+
+    return () => {
+      receivedListener.current?.remove();
+      responseListener.current?.remove();
+    };
+  }, [user, pushReady, handleNotificationDeepLink]);
 
   if (loading) {
     return (
@@ -282,7 +408,15 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        if (pendingCampaignIdRef.current) {
+          openCharityCampaignDetail(pendingCampaignIdRef.current);
+          pendingCampaignIdRef.current = null;
+        }
+      }}
+    >
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           user.role === "rescue_team" ? (
@@ -301,6 +435,16 @@ export default function AppNavigator() {
                   title: "Chọn vị trí trên bản đồ",
                 }}
               />
+              <Stack.Screen
+                name="CharityCampaignDetail"
+                component={CharityCampaignDetailScreen}
+                options={{ headerShown: true, title: "Chi tiết đợt quyên góp" }}
+              />
+              <Stack.Screen
+                name="CharityDonationHistory"
+                component={CharityDonationHistoryScreen}
+                options={{ headerShown: true, title: "Lịch sử quyên góp" }}
+              />
             </>
           ) : (
             <>
@@ -317,6 +461,16 @@ export default function AppNavigator() {
                   headerShown: true,
                   title: "Chọn vị trí trên bản đồ",
                 }}
+              />
+              <Stack.Screen
+                name="CharityCampaignDetail"
+                component={CharityCampaignDetailScreen}
+                options={{ headerShown: true, title: "Chi tiết đợt quyên góp" }}
+              />
+              <Stack.Screen
+                name="CharityDonationHistory"
+                component={CharityDonationHistoryScreen}
+                options={{ headerShown: true, title: "Lịch sử quyên góp" }}
               />
             </>
           )
@@ -339,9 +493,37 @@ export default function AppNavigator() {
                 title: "Chọn vị trí trên bản đồ",
               }}
             />
+            <Stack.Screen
+              name="CharityCampaignDetail"
+              component={CharityCampaignDetailScreen}
+              options={{ headerShown: true, title: "Chi tiết đợt quyên góp" }}
+            />
           </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  pushFallbackBox: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    backgroundColor: "#FFFBEB",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pushFallbackText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#92400E",
+    fontWeight: "600",
+  },
+});
