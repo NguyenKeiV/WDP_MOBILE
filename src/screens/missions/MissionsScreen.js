@@ -40,6 +40,12 @@ const STATUS_MISSION_CONFIG = {
     bg: COLORS.primary + "1A",
     icon: "local-shipping",
   },
+  verified: {
+    label: "Chờ điều phối xác nhận",
+    color: "#4F46E5",
+    bg: "#EEF2FF",
+    icon: "pending-actions",
+  },
   completed: {
     label: "Hoàn thành",
     color: "#388E3C",
@@ -318,7 +324,9 @@ export default function MissionsScreen({ navigation }) {
 
   // Phân loại missions
   const pendingMissions = missions.filter((m) => m.status === "assigned");
-  const activeMissions = missions.filter((m) => m.status === "on_mission");
+  const activeMissions = missions.filter(
+    (m) => m.status === "on_mission" || m.status === "verified",
+  );
   const completedMissions = missions.filter((m) => m.status === "completed");
 
   const paddingBottom = (insets.bottom || 24) + 24;

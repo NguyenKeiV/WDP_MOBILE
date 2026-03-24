@@ -71,8 +71,12 @@ export default function MissionDetailScreen({ route, navigation }) {
 
   // Khởi tạo completed từ status thực tế của mission
   const isAlreadyCompleted = mission.status === "completed";
+  const isAlreadyExecutionReported = mission.status === "verified";
   const [completed, setCompleted] = useState(isAlreadyCompleted);
   const [incompleteReported, setIncompleteReported] = useState(false);
+  const [executionReported, setExecutionReported] = useState(
+    isAlreadyExecutionReported,
+  );
   const [completing, setCompleting] = useState(false);
   const [reportingIncomplete, setReportingIncomplete] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -87,6 +91,8 @@ export default function MissionDetailScreen({ route, navigation }) {
   const [routeInfo, setRouteInfo] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [showMap, setShowMap] = useState(true);
+  const [vehicleRequestInfo, setVehicleRequestInfo] = useState(null);
+  const [loadingVehicleInfo, setLoadingVehicleInfo] = useState(false);
 
   // Lightbox xem ảnh
   const [viewingImage, setViewingImage] = useState(null);
@@ -114,6 +120,22 @@ export default function MissionDetailScreen({ route, navigation }) {
       initRouting();
     }
   }, []);
+
+  useEffect(() => {
+    const fetchVehicleInfo = async () => {
+      setLoadingVehicleInfo(true);
+      try {
+        const req = await missionsApi.getMyVehicleRequestByRescueRequest(mission.id);
+        setVehicleRequestInfo(req || null);
+      } catch {
+        setVehicleRequestInfo(null);
+      } finally {
+        setLoadingVehicleInfo(false);
+      }
+    };
+
+    fetchVehicleInfo();
+  }, [mission.id]);
 
   const initRouting = async () => {
     setLoadingRoute(true);
@@ -219,86 +241,80 @@ export default function MissionDetailScreen({ route, navigation }) {
   };
 
   const handleSubmitComplete = async () => {
-    // Guard: không gọi API nếu đã completed
+    await handleSubmitExecutionReport({ executed: true });
+  };
+
+  const handleSubmitIncomplete = async () => {
+    await handleSubmitExecutionReport({ executed: false });
+  };
+
+  const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
+
+  const vehicleStatus = vehicleRequestInfo?.status || null;
+  const hasVehicleRequest = !!vehicleRequestInfo;
+  const isVehicleApproved = vehicleStatus === "approved";
+  const canReportMission =
+    mission.status === "on_mission" && (!hasVehicleRequest || isVehicleApproved);
+
+  const handleSubmitExecutionReport = async ({ executed }) => {
     if (isAlreadyCompleted || completed) {
-      Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành rồi.");
-      setShowCompleteModal(false);
+      Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành.");
       return;
     }
 
-    setCompleting(true);
+    const reportNotes = executed
+      ? completionNotes.trim()
+      : incompleteReason.trim();
+
+    if (!executed && !reportNotes) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do không thực hiện.");
+      return;
+    }
+
+    if (executed) {
+      setCompleting(true);
+    } else {
+      setReportingIncomplete(true);
+    }
+
     try {
-      let completion_media_urls = [];
-      if (completionMediaUris.length > 0) {
-        const urls = await Promise.all(
-          completionMediaUris.map((uri) => uploadImage(uri)),
-        );
-        completion_media_urls = urls.filter(Boolean);
+      let reportMediaUrls = [];
+      const sourceUris = executed ? completionMediaUris : incompleteMediaUris;
+      if (sourceUris.length > 0) {
+        const urls = await Promise.all(sourceUris.map((uri) => uploadImage(uri)));
+        reportMediaUrls = urls.filter(Boolean);
       }
-      await missionsApi.complete(
-        mission.id,
-        completionNotes.trim(),
-        completion_media_urls,
-      );
-      setShowCompleteModal(false);
-      setCompletionNotes("");
-      setCompletionMediaUris([]);
-      setCompleted(true);
+
+      await missionsApi.reportExecution(mission.id, {
+        executed,
+        report_notes: reportNotes,
+        report_media_urls: reportMediaUrls,
+      });
+
+      if (executed) {
+        setShowCompleteModal(false);
+        setCompletionNotes("");
+        setCompletionMediaUris([]);
+      } else {
+        setShowIncompleteModal(false);
+        setIncompleteReason("");
+        setIncompleteMediaUris([]);
+        setIncompleteReported(true);
+      }
+
+      setExecutionReported(true);
       Alert.alert(
-        "✅ Thành công",
-        "Nhiệm vụ đã hoàn thành. Đội của bạn đã trở về trạng thái sẵn sàng.",
+        "Đã gửi báo cáo",
+        "Đội đã gửi báo cáo thực hiện nhiệm vụ. Chờ điều phối viên xác nhận.",
         [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     } catch (e) {
       Alert.alert("Lỗi", e.message);
     } finally {
       setCompleting(false);
-    }
-  };
-
-  const handleSubmitIncomplete = async () => {
-    if (isAlreadyCompleted || completed) {
-      Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành.");
-      setShowIncompleteModal(false);
-      return;
-    }
-    const reason = incompleteReason.trim();
-    if (!reason) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do không hoàn thành.");
-      return;
-    }
-
-    setReportingIncomplete(true);
-    try {
-      let imageUrls = [];
-      if (incompleteMediaUris.length > 0) {
-        const urls = await Promise.all(
-          incompleteMediaUris.map((uri) => uploadImage(uri)),
-        );
-        imageUrls = urls.filter(Boolean);
-      }
-      await missionsApi.reportIncomplete(mission.id, {
-        reason,
-        previousNotes: mission.notes || "",
-        imageUrls,
-      });
-      setShowIncompleteModal(false);
-      setIncompleteReason("");
-      setIncompleteMediaUris([]);
-      setIncompleteReported(true);
-      Alert.alert(
-        "Đã gửi báo cáo",
-        "Yêu cầu đã chuyển về trạng thái chờ điều phối xử lý lại. Điều phối viên sẽ xem lý do và ảnh trong ghi chú nhiệm vụ.",
-        [{ text: "OK", onPress: () => navigation.goBack() }],
-      );
-    } catch (e) {
-      Alert.alert("Lỗi", e.message);
-    } finally {
       setReportingIncomplete(false);
     }
   };
-
-  const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -314,11 +330,15 @@ export default function MissionDetailScreen({ route, navigation }) {
             {
               backgroundColor: completed
                 ? "#E8F5E9"
+                : executionReported
+                  ? "#EEF2FF"
                 : incompleteReported
                   ? "#FFF3E0"
                   : COLORS.primary + "15",
               borderColor: completed
                 ? "#388E3C30"
+                : executionReported
+                  ? "#6366F140"
                 : incompleteReported
                   ? "#F57C0040"
                   : COLORS.primary + "30",
@@ -326,24 +346,34 @@ export default function MissionDetailScreen({ route, navigation }) {
           ]}
         >
           <MaterialIcons
-            name={
-              completed
-                ? "check-circle"
-                : incompleteReported
-                  ? "report-problem"
-                  : "local-shipping"
-            }
+              name={
+                completed
+                  ? "check-circle"
+                  : executionReported
+                    ? "pending-actions"
+                  : incompleteReported
+                    ? "report-problem"
+                    : "local-shipping"
+              }
             size={24}
-            color={
-              completed ? "#388E3C" : incompleteReported ? "#E65100" : COLORS.primary
-            }
-          />
+              color={
+                completed
+                  ? "#388E3C"
+                  : executionReported
+                    ? "#4F46E5"
+                    : incompleteReported
+                      ? "#E65100"
+                      : COLORS.primary
+              }
+            />
           <Text
             style={[
               styles.statusBannerText,
               {
                 color: completed
                   ? "#388E3C"
+                  : executionReported
+                    ? "#4F46E5"
                   : incompleteReported
                     ? "#E65100"
                     : COLORS.primary,
@@ -352,6 +382,8 @@ export default function MissionDetailScreen({ route, navigation }) {
           >
             {completed
               ? "Nhiệm vụ đã hoàn thành"
+              : executionReported
+                ? "Đã gửi báo cáo, chờ điều phối xác nhận"
               : incompleteReported
                 ? "Đã báo cáo không hoàn thành"
                 : "Đang thực hiện cứu hộ"}
@@ -604,6 +636,104 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         )}
 
+        {/* Phương tiện được cấp cho nhiệm vụ */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons
+              name="directions-car"
+              size={18}
+              color={COLORS.textLight}
+            />
+            <Text style={styles.sectionTitle}>Phương tiện nhiệm vụ</Text>
+          </View>
+
+          {loadingVehicleInfo ? (
+            <View style={styles.vehicleInfoLoading}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.vehicleInfoMuted}>Đang tải thông tin phương tiện...</Text>
+            </View>
+          ) : !hasVehicleRequest ? (
+            <View style={styles.vehicleInfoBoxMuted}>
+              <Text style={styles.vehicleInfoMuted}>
+                Chưa có yêu cầu phương tiện cho nhiệm vụ này.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View
+                style={[
+                  styles.vehicleStatusBadge,
+                  vehicleStatus === "approved"
+                    ? styles.vehicleStatusApproved
+                    : vehicleStatus === "pending"
+                      ? styles.vehicleStatusPending
+                      : styles.vehicleStatusOther,
+                ]}
+              >
+                <MaterialIcons
+                  name={
+                    vehicleStatus === "approved"
+                      ? "check-circle"
+                      : vehicleStatus === "pending"
+                        ? "schedule"
+                        : "info"
+                  }
+                  size={16}
+                  color={
+                    vehicleStatus === "approved"
+                      ? "#388E3C"
+                      : vehicleStatus === "pending"
+                        ? "#F57C00"
+                        : COLORS.textLight
+                  }
+                />
+                <Text
+                  style={[
+                    styles.vehicleStatusText,
+                    {
+                      color:
+                        vehicleStatus === "approved"
+                          ? "#388E3C"
+                          : vehicleStatus === "pending"
+                            ? "#E65100"
+                            : COLORS.textLight,
+                    },
+                  ]}
+                >
+                  {vehicleStatus === "approved"
+                    ? "Đã được cấp phương tiện"
+                    : vehicleStatus === "pending"
+                      ? "Đang chờ quản lý duyệt phương tiện"
+                      : `Trạng thái: ${vehicleStatus}`}
+                </Text>
+              </View>
+
+              {Array.isArray(vehicleRequestInfo?.assigned_vehicles) &&
+              vehicleRequestInfo.assigned_vehicles.length > 0 ? (
+                <View style={styles.vehicleListWrap}>
+                  {vehicleRequestInfo.assigned_vehicles.map((v) => (
+                    <View key={v.id} style={styles.vehicleItemRow}>
+                      <MaterialIcons
+                        name="directions-car"
+                        size={15}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.vehicleItemText}>
+                        {v.name || "Phương tiện"}
+                        {v.license_plate ? ` (${v.license_plate})` : ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.vehicleInfoMuted}>
+                  Chưa có phương tiện được gán cụ thể.
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+
         {/* Thời gian */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
@@ -635,13 +765,21 @@ export default function MissionDetailScreen({ route, navigation }) {
         {/* Báo cáo nhiệm vụ — CHỈ khi đang on_mission */}
         {!completed && !incompleteReported && mission.status === "on_mission" && (
           <View style={styles.missionActions}>
+            {!canReportMission && (
+              <View style={styles.vehicleInfoBoxMuted}>
+                <Text style={styles.vehicleInfoMuted}>
+                  Đội chưa được duyệt phương tiện. Vui lòng chờ điều phối viên/ quản lý cập nhật trước khi gửi báo cáo thực hiện.
+                </Text>
+              </View>
+            )}
             <TouchableOpacity
               style={[
                 styles.incompleteBtn,
                 (completing || reportingIncomplete) && { opacity: 0.7 },
+                !canReportMission && { opacity: 0.5 },
               ]}
               onPress={() => setShowIncompleteModal(true)}
-              disabled={completing || reportingIncomplete}
+              disabled={completing || reportingIncomplete || !canReportMission}
             >
               <MaterialIcons name="cancel" size={22} color={COLORS.white} />
               <Text style={styles.incompleteBtnText}>
@@ -649,9 +787,13 @@ export default function MissionDetailScreen({ route, navigation }) {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.completeBtn, completing && { opacity: 0.7 }]}
+              style={[
+                styles.completeBtn,
+                completing && { opacity: 0.7 },
+                !canReportMission && { opacity: 0.5 },
+              ]}
               onPress={() => setShowCompleteModal(true)}
-              disabled={completing || reportingIncomplete}
+              disabled={completing || reportingIncomplete || !canReportMission}
             >
               {completing ? (
                 <ActivityIndicator color={COLORS.white} />
@@ -1043,6 +1185,64 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   teamInfo: { fontSize: 13, color: COLORS.text },
+  vehicleInfoLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  vehicleInfoBoxMuted: {
+    backgroundColor: COLORS.grayLight,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    padding: 10,
+  },
+  vehicleInfoMuted: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    lineHeight: 18,
+  },
+  vehicleStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  vehicleStatusApproved: {
+    backgroundColor: "#E8F5E9",
+    borderColor: "#388E3C33",
+  },
+  vehicleStatusPending: {
+    backgroundColor: "#FFF3E0",
+    borderColor: "#F57C0040",
+  },
+  vehicleStatusOther: {
+    backgroundColor: COLORS.grayLight,
+    borderColor: COLORS.grayBorder,
+  },
+  vehicleStatusText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  vehicleListWrap: {
+    gap: 8,
+    marginTop: 2,
+  },
+  vehicleItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  vehicleItemText: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: "600",
+  },
   timeRow: {
     flexDirection: "row",
     alignItems: "center",
