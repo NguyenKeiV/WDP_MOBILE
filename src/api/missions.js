@@ -40,9 +40,24 @@ export const missionsApi = {
         : [],
     }),
 
-  reportExecution: (id, { executed, report_notes, report_media_urls }) =>
-    apiClient.post(`/rescue-requests/${id}/team-report-execution`, {
+  reportExecution: (
+    id,
+    {
       executed,
+      outcome,
+      unmet_people_count,
+      partial_reason,
+      report_notes,
+      report_media_urls,
+    },
+  ) =>
+    apiClient.post(`/rescue-requests/${id}/team-report-execution`, {
+      ...(executed !== undefined ? { executed } : {}),
+      ...(outcome ? { outcome } : {}),
+      ...(unmet_people_count !== undefined && unmet_people_count !== null
+        ? { unmet_people_count }
+        : {}),
+      ...(partial_reason ? { partial_reason } : {}),
       report_notes,
       report_media_urls: Array.isArray(report_media_urls)
         ? report_media_urls

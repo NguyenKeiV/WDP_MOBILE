@@ -21,6 +21,6 @@ export const vehicleRequestsApi = {
   return: (id) => apiClient.post("/vehicle-requests/" + id + "/return"),
 
   // RescueTeam báo cáo đã trả xe
-  reportReturn: (id) =>
-    apiClient.post("/vehicle-requests/" + id + "/report-return"),
+  reportReturn: (id, payload = {}) =>
+    apiClient.post("/vehicle-requests/" + id + "/report-return", payload),
 };

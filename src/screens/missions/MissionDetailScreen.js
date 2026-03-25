@@ -71,9 +71,11 @@ export default function MissionDetailScreen({ route, navigation }) {
 
   // Khởi tạo completed từ status thực tế của mission
   const isAlreadyCompleted = mission.status === "completed";
+  const isAlreadyPartial = mission.status === "partially_completed";
   const isAlreadyExecutionReported = mission.status === "verified";
   const [completed, setCompleted] = useState(isAlreadyCompleted);
   const [incompleteReported, setIncompleteReported] = useState(false);
+  const [partialReported, setPartialReported] = useState(isAlreadyPartial);
   const [executionReported, setExecutionReported] = useState(
     isAlreadyExecutionReported,
   );
@@ -81,10 +83,16 @@ export default function MissionDetailScreen({ route, navigation }) {
   const [reportingIncomplete, setReportingIncomplete] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [showPartialModal, setShowPartialModal] = useState(false);
   const [completionNotes, setCompletionNotes] = useState("");
   const [completionMediaUris, setCompletionMediaUris] = useState([]);
   const [incompleteReason, setIncompleteReason] = useState("");
   const [incompleteMediaUris, setIncompleteMediaUris] = useState([]);
+  const [partialUnmetPeopleCount, setPartialUnmetPeopleCount] = useState("");
+  const [partialReason, setPartialReason] = useState("");
+  const [partialNotes, setPartialNotes] = useState("");
+  const [partialMediaUris, setPartialMediaUris] = useState([]);
+  const [reportingPartial, setReportingPartial] = useState(false);
 
   const [myLocation, setMyLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
@@ -240,12 +248,20 @@ export default function MissionDetailScreen({ route, navigation }) {
     setIncompleteMediaUris((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const removePartialImage = (index) => {
+    setPartialMediaUris((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmitComplete = async () => {
     await handleSubmitExecutionReport({ executed: true });
   };
 
   const handleSubmitIncomplete = async () => {
     await handleSubmitExecutionReport({ executed: false });
+  };
+
+  const handleSubmitPartial = async () => {
+    await handleSubmitExecutionReport({ executed: true, outcome: "partially_completed" });
   };
 
   const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
@@ -256,22 +272,43 @@ export default function MissionDetailScreen({ route, navigation }) {
   const canReportMission =
     mission.status === "on_mission" && (!hasVehicleRequest || isVehicleApproved);
 
-  const handleSubmitExecutionReport = async ({ executed }) => {
+  const handleSubmitExecutionReport = async ({ executed, outcome }) => {
     if (isAlreadyCompleted || completed) {
       Alert.alert("Thông báo", "Nhiệm vụ này đã được hoàn thành.");
       return;
     }
 
-    const reportNotes = executed
-      ? completionNotes.trim()
-      : incompleteReason.trim();
+    const isPartial = outcome === "partially_completed";
+
+    const reportNotes = isPartial
+      ? partialNotes.trim()
+      : executed
+        ? completionNotes.trim()
+        : incompleteReason.trim();
 
     if (!executed && !reportNotes) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do không thực hiện.");
       return;
     }
 
-    if (executed) {
+    if (isPartial) {
+      if (!partialReason.trim()) {
+        Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do hoàn thành một phần.");
+        return;
+      }
+      if (
+        partialUnmetPeopleCount === "" ||
+        Number.isNaN(Number(partialUnmetPeopleCount)) ||
+        Number(partialUnmetPeopleCount) < 0
+      ) {
+        Alert.alert("Thiếu thông tin", "Vui lòng nhập số người chưa được hỗ trợ hợp lệ.");
+        return;
+      }
+    }
+
+    if (isPartial) {
+      setReportingPartial(true);
+    } else if (executed) {
       setCompleting(true);
     } else {
       setReportingIncomplete(true);
@@ -279,19 +316,37 @@ export default function MissionDetailScreen({ route, navigation }) {
 
     try {
       let reportMediaUrls = [];
-      const sourceUris = executed ? completionMediaUris : incompleteMediaUris;
+      const sourceUris = isPartial
+        ? partialMediaUris
+        : executed
+          ? completionMediaUris
+          : incompleteMediaUris;
       if (sourceUris.length > 0) {
         const urls = await Promise.all(sourceUris.map((uri) => uploadImage(uri)));
         reportMediaUrls = urls.filter(Boolean);
       }
 
       await missionsApi.reportExecution(mission.id, {
-        executed,
+        ...(isPartial ? {} : { executed }),
+        ...(isPartial
+          ? {
+              outcome: "partially_completed",
+              unmet_people_count: Number(partialUnmetPeopleCount),
+              partial_reason: partialReason.trim(),
+            }
+          : {}),
         report_notes: reportNotes,
         report_media_urls: reportMediaUrls,
       });
 
-      if (executed) {
+      if (isPartial) {
+        setShowPartialModal(false);
+        setPartialUnmetPeopleCount("");
+        setPartialReason("");
+        setPartialNotes("");
+        setPartialMediaUris([]);
+        setPartialReported(true);
+      } else if (executed) {
         setShowCompleteModal(false);
         setCompletionNotes("");
         setCompletionMediaUris([]);
@@ -305,7 +360,9 @@ export default function MissionDetailScreen({ route, navigation }) {
       setExecutionReported(true);
       Alert.alert(
         "Đã gửi báo cáo",
-        "Đội đã gửi báo cáo thực hiện nhiệm vụ. Chờ điều phối viên xác nhận.",
+        isPartial
+          ? "Đội đã gửi báo cáo hoàn thành một phần. Chờ điều phối viên xác nhận."
+          : "Đội đã gửi báo cáo thực hiện nhiệm vụ. Chờ điều phối viên xác nhận.",
         [{ text: "OK", onPress: () => navigation.goBack() }],
       );
     } catch (e) {
@@ -313,6 +370,7 @@ export default function MissionDetailScreen({ route, navigation }) {
     } finally {
       setCompleting(false);
       setReportingIncomplete(false);
+      setReportingPartial(false);
     }
   };
 
@@ -330,6 +388,8 @@ export default function MissionDetailScreen({ route, navigation }) {
             {
               backgroundColor: completed
                 ? "#E8F5E9"
+                : partialReported
+                  ? "#FFF8E1"
                 : executionReported
                   ? "#EEF2FF"
                 : incompleteReported
@@ -337,6 +397,8 @@ export default function MissionDetailScreen({ route, navigation }) {
                   : COLORS.primary + "15",
               borderColor: completed
                 ? "#388E3C30"
+                : partialReported
+                  ? "#F9A82540"
                 : executionReported
                   ? "#6366F140"
                 : incompleteReported
@@ -349,6 +411,8 @@ export default function MissionDetailScreen({ route, navigation }) {
               name={
                 completed
                   ? "check-circle"
+                  : partialReported
+                    ? "pending-actions"
                   : executionReported
                     ? "pending-actions"
                   : incompleteReported
@@ -359,6 +423,8 @@ export default function MissionDetailScreen({ route, navigation }) {
               color={
                 completed
                   ? "#388E3C"
+                  : partialReported
+                    ? "#F9A825"
                   : executionReported
                     ? "#4F46E5"
                     : incompleteReported
@@ -372,6 +438,8 @@ export default function MissionDetailScreen({ route, navigation }) {
               {
                 color: completed
                   ? "#388E3C"
+                  : partialReported
+                    ? "#F9A825"
                   : executionReported
                     ? "#4F46E5"
                   : incompleteReported
@@ -382,6 +450,8 @@ export default function MissionDetailScreen({ route, navigation }) {
           >
             {completed
               ? "Nhiệm vụ đã hoàn thành"
+              : partialReported
+                ? "Đã báo cáo hoàn thành một phần, chờ điều phối xác nhận"
               : executionReported
                 ? "Đã gửi báo cáo, chờ điều phối xác nhận"
               : incompleteReported
@@ -775,11 +845,18 @@ export default function MissionDetailScreen({ route, navigation }) {
             <TouchableOpacity
               style={[
                 styles.incompleteBtn,
-                (completing || reportingIncomplete) && { opacity: 0.7 },
+                (completing || reportingIncomplete || reportingPartial) && {
+                  opacity: 0.7,
+                },
                 !canReportMission && { opacity: 0.5 },
               ]}
               onPress={() => setShowIncompleteModal(true)}
-              disabled={completing || reportingIncomplete || !canReportMission}
+              disabled={
+                completing ||
+                reportingIncomplete ||
+                reportingPartial ||
+                !canReportMission
+              }
             >
               <MaterialIcons name="cancel" size={22} color={COLORS.white} />
               <Text style={styles.incompleteBtnText}>
@@ -789,11 +866,18 @@ export default function MissionDetailScreen({ route, navigation }) {
             <TouchableOpacity
               style={[
                 styles.completeBtn,
-                completing && { opacity: 0.7 },
+                (completing || reportingIncomplete || reportingPartial) && {
+                  opacity: 0.7,
+                },
                 !canReportMission && { opacity: 0.5 },
               ]}
               onPress={() => setShowCompleteModal(true)}
-              disabled={completing || reportingIncomplete || !canReportMission}
+              disabled={
+                completing ||
+                reportingIncomplete ||
+                reportingPartial ||
+                !canReportMission
+              }
             >
               {completing ? (
                 <ActivityIndicator color={COLORS.white} />
@@ -805,6 +889,35 @@ export default function MissionDetailScreen({ route, navigation }) {
                     color={COLORS.white}
                   />
                   <Text style={styles.completeBtnText}>Hoàn thành nhiệm vụ</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.partialBtn,
+                (completing || reportingIncomplete || reportingPartial) && {
+                  opacity: 0.7,
+                },
+                !canReportMission && { opacity: 0.5 },
+              ]}
+              onPress={() => setShowPartialModal(true)}
+              disabled={
+                completing ||
+                reportingIncomplete ||
+                reportingPartial ||
+                !canReportMission
+              }
+            >
+              {reportingPartial ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <>
+                  <MaterialIcons
+                    name="checklist"
+                    size={22}
+                    color={COLORS.white}
+                  />
+                  <Text style={styles.partialBtnText}>Hoàn thành một phần</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -824,6 +937,15 @@ export default function MissionDetailScreen({ route, navigation }) {
             <MaterialIcons name="report-problem" size={32} color="#E65100" />
             <Text style={styles.incompleteBannerText}>
               Đã gửi báo cáo không hoàn thành kèm lý do và ảnh
+            </Text>
+          </View>
+        )}
+
+        {partialReported && (
+          <View style={styles.partialBanner}>
+            <MaterialIcons name="pending-actions" size={30} color="#F9A825" />
+            <Text style={styles.partialBannerText}>
+              Đã gửi báo cáo hoàn thành một phần, chờ điều phối xác nhận
             </Text>
           </View>
         )}
@@ -999,6 +1121,116 @@ export default function MissionDetailScreen({ route, navigation }) {
                   disabled={reportingIncomplete}
                 >
                   {reportingIncomplete ? (
+                    <ActivityIndicator color={COLORS.white} size="small" />
+                  ) : (
+                    <Text style={styles.modalSubmitText}>Gửi báo cáo</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal báo cáo hoàn thành một phần */}
+        <Modal
+          visible={showPartialModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => !reportingPartial && setShowPartialModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCompleteBox}>
+              <Text style={styles.modalCompleteTitle}>Hoàn thành một phần</Text>
+              <Text style={styles.modalCompleteSub}>
+                Nhập số người chưa hỗ trợ và lý do để điều phối viên xử lý tiếp.
+              </Text>
+
+              <TextInput
+                style={styles.modalCountInput}
+                placeholder="Số người chưa được hỗ trợ"
+                value={partialUnmetPeopleCount}
+                onChangeText={setPartialUnmetPeopleCount}
+                keyboardType="number-pad"
+              />
+
+              <TextInput
+                style={styles.modalCompleteInput}
+                placeholder="Lý do hoàn thành một phần"
+                value={partialReason}
+                onChangeText={setPartialReason}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TextInput
+                style={styles.modalCompleteInput}
+                placeholder="Ghi chú báo cáo (tuỳ chọn)"
+                value={partialNotes}
+                onChangeText={setPartialNotes}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={styles.modalAddPhotoBtn}
+                onPress={() => pickReportImages(setPartialMediaUris)}
+              >
+                <MaterialIcons
+                  name="add-photo-alternate"
+                  size={22}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.modalAddPhotoText}>Chọn ảnh báo cáo</Text>
+                {partialMediaUris.length > 0 && (
+                  <Text style={styles.modalPhotoCount}>
+                    {partialMediaUris.length + " ảnh"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {partialMediaUris.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.modalPhotoRow}
+                >
+                  {partialMediaUris.map((uri, index) => (
+                    <View key={index} style={styles.modalPhotoWrap}>
+                      <Image source={{ uri }} style={styles.modalPhoto} />
+                      <TouchableOpacity
+                        style={styles.modalPhotoRemove}
+                        onPress={() => removePartialImage(index)}
+                      >
+                        <MaterialIcons
+                          name="close"
+                          size={14}
+                          color={COLORS.white}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+
+              <View style={styles.modalCompleteActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowPartialModal(false)}
+                  disabled={reportingPartial}
+                >
+                  <Text style={styles.modalCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalPartialSubmitBtn,
+                    reportingPartial && { opacity: 0.7 },
+                  ]}
+                  onPress={handleSubmitPartial}
+                  disabled={reportingPartial}
+                >
+                  {reportingPartial ? (
                     <ActivityIndicator color={COLORS.white} size="small" />
                   ) : (
                     <Text style={styles.modalSubmitText}>Gửi báo cáo</Text>
@@ -1271,6 +1503,16 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   completeBtnText: { color: COLORS.white, fontSize: 17, fontWeight: "800" },
+  partialBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#F9A825",
+    borderRadius: 14,
+    padding: 16,
+  },
+  partialBtnText: { color: COLORS.white, fontSize: 16, fontWeight: "800" },
   completedBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1302,6 +1544,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
   },
+  partialBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#FFF8E1",
+    borderRadius: 14,
+    padding: 18,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#F9A82540",
+  },
+  partialBannerText: {
+    color: "#F9A825",
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -1328,6 +1588,14 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     minHeight: 72,
+    marginBottom: 12,
+  },
+  modalCountInput: {
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
     marginBottom: 12,
   },
   modalAddPhotoBtn: {
@@ -1380,6 +1648,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 10,
     backgroundColor: "#E65100",
+  },
+  modalPartialSubmitBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: "#F9A825",
   },
   modalSubmitText: { fontSize: 14, color: COLORS.white, fontWeight: "700" },
   lightboxOverlay: {

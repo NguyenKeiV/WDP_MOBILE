@@ -8,14 +8,20 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  TextInput,
+  ScrollView,
+  Image,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as ImagePicker from "expo-image-picker";
 import { vehicleRequestsApi } from "../../api/vehicleRequests";
 import { missionsApi } from "../../api/missions";
+import { uploadImage } from "../../api/upload";
 import { COLORS } from "../../constants";
 
 const VEHICLE_TYPE_LABELS = {
@@ -55,6 +61,12 @@ const STATUS_CONFIG = {
     bg: "#E8F5E9",
     icon: "assignment-return",
   },
+  pending_return: {
+    label: "Chờ quản lý xác nhận",
+    color: "#4F46E5",
+    bg: "#EEF2FF",
+    icon: "pending-actions",
+  },
   rejected: {
     label: "Bị từ chối",
     color: "#757575",
@@ -62,6 +74,13 @@ const STATUS_CONFIG = {
     icon: "cancel",
   },
 };
+
+const RETURN_CHECKLIST_OPTIONS = [
+  "Vệ sinh phương tiện",
+  "Kiểm tra máy",
+  "Bàn giao chìa khóa",
+  "Nạp nhiên liệu",
+];
 
 function VehicleRequestCard({ item, onReturn, returning }) {
   const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
@@ -162,6 +181,13 @@ function VehicleRequestCard({ item, onReturn, returning }) {
           <Text style={styles.returnedText}>Xe đã được trả thành công</Text>
         </View>
       )}
+
+      {item.status === "pending_return" && (
+        <View style={styles.pendingReturnBanner}>
+          <MaterialIcons name="pending-actions" size={18} color="#4F46E5" />
+          <Text style={styles.pendingReturnText}>Chờ quản lý xác nhận</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -175,6 +201,13 @@ export default function VehicleReturnScreen() {
   const [myTeamId, setMyTeamId] = useState(null);
   const [myTeamName, setMyTeamName] = useState("");
   const [fetchError, setFetchError] = useState(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnTarget, setReturnTarget] = useState(null);
+  const [checklist, setChecklist] = useState([]);
+  const [fuelLevel, setFuelLevel] = useState("");
+  const [damageReport, setDamageReport] = useState("");
+  const [returnNotes, setReturnNotes] = useState("");
+  const [returnPhotoUris, setReturnPhotoUris] = useState([]);
 
   // ── Sửa: lấy team_id từ endpoint missions trước, rồi mới filter vehicle requests
   const fetchRequests = useCallback(async () => {
@@ -199,19 +232,24 @@ export default function VehicleReturnScreen() {
         setMyTeamName(teamName);
       }
 
-      // Bước 2: lấy vehicle requests của team mình (approved + returned)
-      const [approvedRes, returnedRes] = await Promise.allSettled([
+      // Bước 2: lấy vehicle requests của team mình (approved + pending_return + returned)
+      const [approvedRes, pendingReturnRes, returnedRes] = await Promise.allSettled([
         vehicleRequestsApi.getAll({ status: "approved", team_id: teamId }),
+        vehicleRequestsApi.getAll({ status: "pending_return", team_id: teamId }),
         vehicleRequestsApi.getAll({ status: "returned", team_id: teamId }),
       ]);
 
       const approved =
         approvedRes.status === "fulfilled" ? approvedRes.value?.data || [] : [];
+      const pendingReturn =
+        pendingReturnRes.status === "fulfilled"
+          ? pendingReturnRes.value?.data || []
+          : [];
       const returned =
         returnedRes.status === "fulfilled" ? returnedRes.value?.data || [] : [];
 
-      // Gộp và sắp xếp: approved trước, returned sau
-      const all = [...approved, ...returned].sort(
+      // Gộp và sắp xếp
+      const all = [...approved, ...pendingReturn, ...returned].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at),
       );
 
@@ -237,37 +275,100 @@ export default function VehicleReturnScreen() {
     setRefreshing(false);
   };
 
-  const handleReturn = (item) => {
-    const vehicleNames =
-      item.assigned_vehicles?.map((v) => v.name).join(", ") ||
-      VEHICLE_TYPE_LABELS[item.vehicle_type];
+  const resetReturnForm = () => {
+    setChecklist([]);
+    setFuelLevel("");
+    setDamageReport("");
+    setReturnNotes("");
+    setReturnPhotoUris([]);
+  };
 
-    Alert.alert(
-      "Xác nhận trả xe",
-      "Bạn xác nhận đã trả xe về kho?\n\n" + vehicleNames,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xác nhận trả xe",
-          style: "default",
-          onPress: () => confirmReturn(item.id),
-        },
-      ],
+  const handleReturn = (item) => {
+    setReturnTarget(item);
+    resetReturnForm();
+    setShowReturnModal(true);
+  };
+
+  const toggleChecklist = (label) => {
+    setChecklist((prev) =>
+      prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label],
     );
   };
 
-  const confirmReturn = async (requestId) => {
-    setReturningId(requestId);
+  const pickReturnPhotos = () => {
+    Alert.alert("Đính kèm ảnh", "Chọn nguồn ảnh", [
+      {
+        text: "📷 Chụp ảnh",
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== "granted") {
+            Alert.alert("Cần quyền", "Cho phép truy cập camera.");
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.8,
+            allowsEditing: true,
+          });
+          if (!result.canceled && result.assets?.length) {
+            setReturnPhotoUris((prev) =>
+              [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+            );
+          }
+        },
+      },
+      {
+        text: "🖼️ Thư viện",
+        onPress: async () => {
+          const { status } =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") {
+            Alert.alert("Cần quyền", "Cho phép truy cập thư viện ảnh.");
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: true,
+            quality: 0.8,
+          });
+          if (!result.canceled && result.assets?.length) {
+            setReturnPhotoUris((prev) =>
+              [...prev, ...result.assets.map((a) => a.uri)].slice(0, 10),
+            );
+          }
+        },
+      },
+      { text: "Hủy", style: "cancel" },
+    ]);
+  };
+
+  const confirmReturn = async () => {
+    if (!returnTarget?.id) return;
+    setReturningId(returnTarget.id);
     try {
-      await vehicleRequestsApi.reportReturn(requestId);
+      const photoUrls =
+        returnPhotoUris.length > 0
+          ? (await Promise.all(returnPhotoUris.map((uri) => uploadImage(uri)))).filter(
+              Boolean,
+            )
+          : [];
+      await vehicleRequestsApi.reportReturn(returnTarget.id, {
+        checklist_items: checklist,
+        fuel_level: fuelLevel?.trim() || undefined,
+        damage_report: damageReport?.trim() || undefined,
+        return_notes: returnNotes?.trim() || undefined,
+        media_urls: photoUrls,
+      });
       setRequests((prev) =>
         prev.map((r) =>
-          r.id === requestId ? { ...r, status: "returned" } : r,
+          r.id === returnTarget.id ? { ...r, status: "pending_return" } : r,
         ),
       );
+      setShowReturnModal(false);
+      setReturnTarget(null);
       Alert.alert(
         "✅ Thành công",
-        "Đã báo cáo trả xe. Phương tiện đã được cập nhật về trạng thái sẵn sàng.",
+        "Đã gửi báo cáo trả xe. Trạng thái đã chuyển sang chờ quản lý xác nhận.",
       );
     } catch (e) {
       Alert.alert(
@@ -280,6 +381,9 @@ export default function VehicleReturnScreen() {
   };
 
   const approvedCount = requests.filter((r) => r.status === "approved").length;
+  const pendingReturnCount = requests.filter(
+    (r) => r.status === "pending_return",
+  ).length;
   const returnedCount = requests.filter((r) => r.status === "returned").length;
   const paddingBottom = (insets.bottom || 24) + 24;
 
@@ -340,6 +444,12 @@ export default function VehicleReturnScreen() {
                   </Text>
                   <Text style={styles.statLabel}>Đã trả</Text>
                 </View>
+                <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
+                  <Text style={[styles.statNum, { color: "#4F46E5" }]}>
+                    {pendingReturnCount}
+                  </Text>
+                  <Text style={styles.statLabel}>Chờ xác nhận</Text>
+                </View>
               </View>
             )}
 
@@ -383,6 +493,111 @@ export default function VehicleReturnScreen() {
         contentContainerStyle={[styles.listContent, { paddingBottom }]}
         showsVerticalScrollIndicator={false}
       />
+
+      <Modal
+        visible={showReturnModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !returningId && setShowReturnModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Báo cáo trả xe</Text>
+            <Text style={styles.modalSub}>
+              Hoàn tất checklist trước khi bàn giao phương tiện.
+            </Text>
+
+            <Text style={styles.fieldLabel}>Checklist</Text>
+            <View style={styles.checklistWrap}>
+              {RETURN_CHECKLIST_OPTIONS.map((item) => (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.checkItem,
+                    checklist.includes(item) && styles.checkItemActive,
+                  ]}
+                  onPress={() => toggleChecklist(item)}
+                >
+                  <MaterialIcons
+                    name={
+                      checklist.includes(item)
+                        ? "check-box"
+                        : "check-box-outline-blank"
+                    }
+                    size={18}
+                    color={
+                      checklist.includes(item) ? COLORS.primary : COLORS.textLight
+                    }
+                  />
+                  <Text style={styles.checkItemText}>{item}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Mức nhiên liệu (vd: 70%)"
+              value={fuelLevel}
+              onChangeText={setFuelLevel}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Báo cáo hư hỏng (nếu có)"
+              value={damageReport}
+              onChangeText={setDamageReport}
+            />
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder="Ghi chú bàn giao"
+              value={returnNotes}
+              onChangeText={setReturnNotes}
+              multiline
+              numberOfLines={3}
+            />
+
+            <TouchableOpacity style={styles.photoBtn} onPress={pickReturnPhotos}>
+              <MaterialIcons name="add-a-photo" size={18} color={COLORS.primary} />
+              <Text style={styles.photoBtnText}>Đính kèm ảnh</Text>
+              {returnPhotoUris.length > 0 && (
+                <Text style={styles.photoCount}>{returnPhotoUris.length} ảnh</Text>
+              )}
+            </TouchableOpacity>
+
+            {returnPhotoUris.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.photoRow}
+              >
+                {returnPhotoUris.map((uri, idx) => (
+                  <Image key={idx} source={{ uri }} style={styles.photoThumb} />
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowReturnModal(false)}
+                disabled={!!returningId}
+              >
+                <Text style={styles.cancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, returningId && { opacity: 0.7 }]}
+                onPress={confirmReturn}
+                disabled={!!returningId}
+              >
+                {returningId ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.submitBtnText}>Gửi báo cáo</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -553,6 +768,108 @@ const styles = StyleSheet.create({
     borderColor: "#388E3C30",
   },
   returnedText: { fontSize: 13, color: "#388E3C", fontWeight: "600" },
+  pendingReturnBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#6366F140",
+  },
+  pendingReturnText: { fontSize: 13, color: "#4F46E5", fontWeight: "600" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  modalBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: "88%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  modalSub: { fontSize: 13, color: COLORS.textLight, marginBottom: 12 },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.textLight,
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  checklistWrap: { marginBottom: 12, gap: 8 },
+  checkItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    backgroundColor: COLORS.grayLight,
+  },
+  checkItemActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + "12",
+  },
+  checkItemText: { fontSize: 13, color: COLORS.text, fontWeight: "600" },
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  textarea: { minHeight: 72, textAlignVertical: "top" },
+  photoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 10,
+  },
+  photoBtnText: { fontSize: 14, color: COLORS.primary, fontWeight: "700" },
+  photoCount: { fontSize: 12, color: COLORS.textLight },
+  photoRow: { marginTop: 10, marginBottom: 12 },
+  photoThumb: { width: 64, height: 64, borderRadius: 8, marginRight: 8 },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: COLORS.grayLight,
+  },
+  cancelBtnText: { fontSize: 14, color: COLORS.text, fontWeight: "600" },
+  submitBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+  },
+  submitBtnText: { fontSize: 14, color: COLORS.white, fontWeight: "700" },
 
   empty: { alignItems: "center", paddingVertical: 48 },
   emptyIconWrap: {
