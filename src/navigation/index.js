@@ -76,6 +76,11 @@ function resolveCampaignId(data) {
   return data.campaign_id || data.campaignId || data.id || null;
 }
 
+function isVehicleReturnReminderPayload(data) {
+  if (!data || typeof data !== "object") return false;
+  return data.type === "mission_completed_return_vehicle";
+}
+
 async function buildCampaignNotificationBody(campaignId) {
   if (!campaignId) {
     return "Hãy xem chi tiết đợt quyên góp mới để tham gia.";
@@ -105,6 +110,11 @@ function openCharityCampaignDetail(campaignId) {
   navigationRef.navigate("CharityCampaignDetail", {
     campaign_id: campaignId,
   });
+}
+
+function openVehicleReturnTab() {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate("RescueTeamTabs", { screen: "VehicleReturn" });
 }
 
 function TabBarIcon({ name, focused, label }) {
@@ -333,6 +343,15 @@ export default function AppNavigator() {
   const pendingCampaignIdRef = useRef(null);
 
   const handleNotificationDeepLink = useCallback((data) => {
+    if (isVehicleReturnReminderPayload(data)) {
+      openVehicleReturnTab();
+      Alert.alert(
+        "Nhắc trả phương tiện",
+        "Nhiệm vụ đã hoàn thành. Vui lòng vào mục Thu hồi xe để trả phương tiện.",
+      );
+      return;
+    }
+
     if (!isCharityCampaignPayload(data)) return;
 
     const campaignId = resolveCampaignId(data);
@@ -358,6 +377,19 @@ export default function AppNavigator() {
     receivedListener.current = Notifications.addNotificationReceivedListener(
       async (notification) => {
         const data = notification?.request?.content?.data;
+
+        if (isVehicleReturnReminderPayload(data)) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Nhắc trả phương tiện",
+              body: "Nhiệm vụ đã hoàn thành. Vui lòng trả phương tiện về kho.",
+              data,
+            },
+            trigger: null,
+          });
+          return;
+        }
+
         if (!isCharityCampaignPayload(data)) return;
 
         const campaignId = resolveCampaignId(data);
