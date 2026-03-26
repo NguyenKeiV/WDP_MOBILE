@@ -22,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import { requestsApi } from "../../api/requests";
 import MapView, { Marker } from "react-native-maps";
 import { uploadImage } from "../../api/upload";
+import { suppliesApi } from "../../api/supplies";
 import { useAuth } from "../../context/AuthContext";
 import { COLORS, CATEGORIES, PRIORITIES, DISTRICTS } from "../../constants";
 import { GUEST_REQUEST_IDS_KEY } from "../../utils/deviceGuestRequests";
@@ -107,9 +108,12 @@ export default function CreateRequestScreen({ navigation }) {
   const [modal, setModal] = useState(null);
   const [success, setSuccess] = useState(false);
   const [mediaUris, setMediaUris] = useState([]);
+  const [suppliesCatalog, setSuppliesCatalog] = useState([]);
+  const [suppliesLoading, setSuppliesLoading] = useState(false);
+  const [reliefPickIndex, setReliefPickIndex] = useState(null);
   /** Dòng nhu yếu phẩm — chỉ gửi khi category = relief */
   const [reliefLines, setReliefLines] = useState([
-    { label: "", quantity: "1", unit: "" },
+    { supply_id: "", quantity: "1" },
   ]);
 
   const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
@@ -158,6 +162,29 @@ export default function CreateRequestScreen({ navigation }) {
     getLocation();
   }, []);
 
+  useEffect(() => {
+    const fetchSupplies = async () => {
+      setSuppliesLoading(true);
+      try {
+        const res = await suppliesApi.getPublicSupplies({ limit: 500 });
+        setSuppliesCatalog(Array.isArray(res.data) ? res.data : []);
+      } catch (e) {
+        setSuppliesCatalog([]);
+      } finally {
+        setSuppliesLoading(false);
+      }
+    };
+
+    if (form.category === "relief") {
+      fetchSupplies();
+    }
+  }, [form.category]);
+
+  const suppliesById = suppliesCatalog.reduce((acc, s) => {
+    acc[s.id] = s;
+    return acc;
+  }, {});
+
   const validate = () => {
     if (!form.category) return "Vui lòng chọn loại yêu cầu";
     if (!form.district) return "Vui lòng chọn quận/huyện";
@@ -170,11 +197,11 @@ export default function CreateRequestScreen({ navigation }) {
     if (form.category === "relief") {
       const ok = reliefLines.some(
         (l) =>
-          String(l.label || "").trim() &&
+          String(l.supply_id || "").trim() &&
           parseInt(String(l.quantity || "0"), 10) >= 1,
       );
       if (!ok) {
-        return "Cứu trợ: thêm ít nhất một nhu yếu phẩm (tên + số lượng hợp lệ).";
+        return "Cứu trợ: thêm ít nhất một nhu yếu phẩm (mặt hàng + số lượng hợp lệ).";
       }
     }
     return null;
@@ -229,17 +256,21 @@ export default function CreateRequestScreen({ navigation }) {
           ? reliefLines
               .filter(
                 (l) =>
-                  String(l.label || "").trim() &&
+                  String(l.supply_id || "").trim() &&
                   parseInt(String(l.quantity || "0"), 10) >= 1,
               )
               .map((l) => {
-                const unit = String(l.unit || "").trim();
+                const supply = suppliesById[l.supply_id];
+                if (!supply) return null;
+                const unit = String(supply.unit || "").trim();
                 return {
-                  label: String(l.label).trim(),
+                  supply_id: l.supply_id,
+                  label: String(supply.name).trim(),
                   quantity: parseInt(String(l.quantity), 10),
                   ...(unit ? { unit } : {}),
                 };
               })
+              .filter(Boolean)
           : undefined;
 
       const res = await requestsApi.create({
@@ -275,7 +306,7 @@ export default function CreateRequestScreen({ navigation }) {
         priority: "medium",
         location_type: "gps",
       });
-      setReliefLines([{ label: "", quantity: "1", unit: "" }]);
+      setReliefLines([{ supply_id: "", quantity: "1" }]);
       setGpsCoords(null);
       setMediaUris([]);
     } catch (e) {
@@ -362,7 +393,7 @@ export default function CreateRequestScreen({ navigation }) {
                       update("category", cat.value);
                       if (cat.value !== "relief") {
                         setReliefLines([
-                          { label: "", quantity: "1", unit: "" },
+                          { supply_id: "", quantity: "1" },
                         ]);
                       }
                     }}
@@ -396,23 +427,42 @@ export default function CreateRequestScreen({ navigation }) {
                 <Text style={styles.required}>*</Text>
               </Text>
               <Text style={styles.fieldHint}>
-                Thêm ít nhất một dòng (tên hàng + số lượng). Đơn vị tuỳ chọn
-                (kg, thùng, chai…).
+                Chọn mặt hàng từ kho. Nhập số lượng. Đơn vị sẽ tự hiển thị theo
+                kho.
               </Text>
+              {suppliesLoading ? (
+                <View style={{ paddingVertical: 10 }}>
+                  <ActivityIndicator color={COLORS.primary} />
+                </View>
+              ) : null}
               {reliefLines.map((line, idx) => (
                 <View key={`relief-${idx}`} style={styles.reliefLineRow}>
-                  <TextInput
-                    style={[styles.input, styles.reliefInputLabel]}
-                    placeholder="Ví dụ: Gạo, nước uống"
-                    value={line.label}
-                    onChangeText={(v) =>
-                      setReliefLines((prev) =>
-                        prev.map((p, i) =>
-                          i === idx ? { ...p, label: v } : p,
-                        ),
-                      )
-                    }
-                  />
+                  <TouchableOpacity
+                    style={[styles.selectBtn, styles.reliefSelectBtn]}
+                    onPress={() => {
+                      setReliefPickIndex(idx);
+                      setModal("reliefSupply");
+                    }}
+                    activeOpacity={0.8}
+                    disabled={suppliesLoading}
+                  >
+                    <Text
+                      style={[
+                        styles.selectBtnText,
+                        !line.supply_id && styles.placeholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {line.supply_id
+                        ? suppliesById[line.supply_id]?.name || "Chọn mặt hàng..."
+                        : "Chọn mặt hàng..."}
+                    </Text>
+                    <MaterialIcons
+                      name="expand-more"
+                      size={18}
+                      color={COLORS.textLight}
+                    />
+                  </TouchableOpacity>
                   <TextInput
                     style={[styles.input, styles.reliefInputQty]}
                     placeholder="SL"
@@ -431,14 +481,12 @@ export default function CreateRequestScreen({ navigation }) {
                   <TextInput
                     style={[styles.input, styles.reliefInputUnit]}
                     placeholder="Đơn vị"
-                    value={line.unit}
-                    onChangeText={(v) =>
-                      setReliefLines((prev) =>
-                        prev.map((p, i) =>
-                          i === idx ? { ...p, unit: v } : p,
-                        ),
-                      )
+                    value={
+                      line.supply_id
+                        ? String(suppliesById[line.supply_id]?.unit || "")
+                        : ""
                     }
+                    editable={false}
                   />
                   {reliefLines.length > 1 ? (
                     <TouchableOpacity
@@ -466,7 +514,7 @@ export default function CreateRequestScreen({ navigation }) {
                 onPress={() =>
                   setReliefLines((prev) => [
                     ...prev,
-                    { label: "", quantity: "1", unit: "" },
+                    { supply_id: "", quantity: "1" },
                   ])
                 }
               >
@@ -767,6 +815,29 @@ export default function CreateRequestScreen({ navigation }) {
           onSelect={(v) => update("priority", v)}
           onClose={() => setModal(null)}
         />
+        <SelectModal
+          visible={modal === "reliefSupply"}
+          title="Chọn mặt hàng trong kho"
+          options={suppliesCatalog.map((s) => ({
+            value: s.id,
+            label: `${s.name} (${s.unit})`,
+          }))}
+          selected={
+            reliefPickIndex != null ? reliefLines[reliefPickIndex]?.supply_id : ""
+          }
+          onSelect={(v) => {
+            if (reliefPickIndex == null) return;
+            setReliefLines((prev) =>
+              prev.map((p, i) =>
+                i === reliefPickIndex ? { ...p, supply_id: v } : p,
+              ),
+            );
+          }}
+          onClose={() => {
+            setModal(null);
+            setReliefPickIndex(null);
+          }}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -867,6 +938,7 @@ const styles = StyleSheet.create({
   reliefInputQty: { width: 56, paddingVertical: 10, textAlign: "center" },
   reliefInputUnit: { width: 76, paddingVertical: 10, paddingHorizontal: 8 },
   reliefRemoveBtn: { padding: 4 },
+  reliefSelectBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 12 },
   reliefAddBtn: {
     flexDirection: "row",
     alignItems: "center",
