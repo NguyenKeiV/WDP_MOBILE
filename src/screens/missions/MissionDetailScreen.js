@@ -593,6 +593,30 @@ export default function MissionDetailScreen({ route, navigation }) {
           </View>
         )}
 
+        {/* Nhu yếu phẩm — cứu trợ */}
+        {mission.category === "relief" &&
+        Array.isArray(mission.relief_needs) &&
+        mission.relief_needs.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons
+                name="inventory-2"
+                size={18}
+                color={COLORS.textLight}
+              />
+              <Text style={styles.sectionTitle}>Nhu yếu phẩm cần hỗ trợ</Text>
+            </View>
+            {mission.relief_needs.map((it, idx) => (
+              <Text key={`rn-${idx}`} style={styles.reliefNeedLine}>
+                • {it.label || "—"}
+                {it.unit
+                  ? ` — ${it.quantity ?? 0} ${it.unit}`
+                  : ` — ${it.quantity ?? 0}`}
+              </Text>
+            ))}
+          </View>
+        )}
+
         {/* Mô tả */}
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
@@ -1373,6 +1397,12 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  reliefNeedLine: {
+    fontSize: 15,
+    color: COLORS.text,
+    lineHeight: 22,
+    marginBottom: 4,
   },
   descText: {
     fontSize: 14,

@@ -107,6 +107,10 @@ export default function CreateRequestScreen({ navigation }) {
   const [modal, setModal] = useState(null);
   const [success, setSuccess] = useState(false);
   const [mediaUris, setMediaUris] = useState([]);
+  /** Dòng nhu yếu phẩm — chỉ gửi khi category = relief */
+  const [reliefLines, setReliefLines] = useState([
+    { label: "", quantity: "1", unit: "" },
+  ]);
 
   const update = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -163,6 +167,16 @@ export default function CreateRequestScreen({ navigation }) {
     const numPeople = parseInt(form.num_people);
     if (!numPeople || numPeople < 1) return "Số người phải ít nhất là 1";
     if (!gpsCoords) return "Chưa lấy được tọa độ GPS. Vui lòng thử lại.";
+    if (form.category === "relief") {
+      const ok = reliefLines.some(
+        (l) =>
+          String(l.label || "").trim() &&
+          parseInt(String(l.quantity || "0"), 10) >= 1,
+      );
+      if (!ok) {
+        return "Cứu trợ: thêm ít nhất một nhu yếu phẩm (tên + số lượng hợp lệ).";
+      }
+    }
     return null;
   };
 
@@ -210,6 +224,24 @@ export default function CreateRequestScreen({ navigation }) {
           );
         }
       }
+      const relief_needs =
+        form.category === "relief"
+          ? reliefLines
+              .filter(
+                (l) =>
+                  String(l.label || "").trim() &&
+                  parseInt(String(l.quantity || "0"), 10) >= 1,
+              )
+              .map((l) => {
+                const unit = String(l.unit || "").trim();
+                return {
+                  label: String(l.label).trim(),
+                  quantity: parseInt(String(l.quantity), 10),
+                  ...(unit ? { unit } : {}),
+                };
+              })
+          : undefined;
+
       const res = await requestsApi.create({
         ...form,
         num_people: parseInt(form.num_people) || 1,
@@ -218,6 +250,7 @@ export default function CreateRequestScreen({ navigation }) {
         longitude: gpsCoords.longitude,
         address: gpsCoords.address || null,
         media_urls,
+        ...(relief_needs?.length ? { relief_needs } : {}),
       });
 
       // Chỉ lưu local khi là guest
@@ -242,6 +275,7 @@ export default function CreateRequestScreen({ navigation }) {
         priority: "medium",
         location_type: "gps",
       });
+      setReliefLines([{ label: "", quantity: "1", unit: "" }]);
       setGpsCoords(null);
       setMediaUris([]);
     } catch (e) {
@@ -294,7 +328,7 @@ export default function CreateRequestScreen({ navigation }) {
             >
               <MaterialIcons name="arrow-back" size={20} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Tạo yêu cầu cứu hộ</Text>
+            <Text style={styles.headerTitle}>Tạo yêu cầu</Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -311,7 +345,7 @@ export default function CreateRequestScreen({ navigation }) {
           {/* Loại hình cứu hộ */}
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>
-              Loại hình cứu hộ <Text style={styles.required}>*</Text>
+              Loại yêu cầu <Text style={styles.required}>*</Text>
             </Text>
             <View style={styles.categoryGrid}>
               {CATEGORIES.map((cat) => {
@@ -324,7 +358,14 @@ export default function CreateRequestScreen({ navigation }) {
                       styles.categoryCard,
                       isActive && styles.categoryCardActive,
                     ]}
-                    onPress={() => update("category", cat.value)}
+                    onPress={() => {
+                      update("category", cat.value);
+                      if (cat.value !== "relief") {
+                        setReliefLines([
+                          { label: "", quantity: "1", unit: "" },
+                        ]);
+                      }
+                    }}
                     activeOpacity={0.9}
                   >
                     <MaterialIcons
@@ -346,6 +387,94 @@ export default function CreateRequestScreen({ navigation }) {
               })}
             </View>
           </View>
+
+          {/* Nhu yếu phẩm — chỉ cứu trợ */}
+          {form.category === "relief" ? (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Nhu yếu phẩm cần hỗ trợ{" "}
+                <Text style={styles.required}>*</Text>
+              </Text>
+              <Text style={styles.fieldHint}>
+                Thêm ít nhất một dòng (tên hàng + số lượng). Đơn vị tuỳ chọn
+                (kg, thùng, chai…).
+              </Text>
+              {reliefLines.map((line, idx) => (
+                <View key={`relief-${idx}`} style={styles.reliefLineRow}>
+                  <TextInput
+                    style={[styles.input, styles.reliefInputLabel]}
+                    placeholder="Ví dụ: Gạo, nước uống"
+                    value={line.label}
+                    onChangeText={(v) =>
+                      setReliefLines((prev) =>
+                        prev.map((p, i) =>
+                          i === idx ? { ...p, label: v } : p,
+                        ),
+                      )
+                    }
+                  />
+                  <TextInput
+                    style={[styles.input, styles.reliefInputQty]}
+                    placeholder="SL"
+                    value={line.quantity}
+                    keyboardType="number-pad"
+                    onChangeText={(v) =>
+                      setReliefLines((prev) =>
+                        prev.map((p, i) =>
+                          i === idx
+                            ? { ...p, quantity: v.replace(/[^0-9]/g, "") }
+                            : p,
+                        ),
+                      )
+                    }
+                  />
+                  <TextInput
+                    style={[styles.input, styles.reliefInputUnit]}
+                    placeholder="Đơn vị"
+                    value={line.unit}
+                    onChangeText={(v) =>
+                      setReliefLines((prev) =>
+                        prev.map((p, i) =>
+                          i === idx ? { ...p, unit: v } : p,
+                        ),
+                      )
+                    }
+                  />
+                  {reliefLines.length > 1 ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        setReliefLines((prev) =>
+                          prev.filter((_, i) => i !== idx),
+                        )
+                      }
+                      style={styles.reliefRemoveBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialIcons
+                        name="remove-circle-outline"
+                        size={22}
+                        color="#94a3b8"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 22 }} />
+                  )}
+                </View>
+              ))}
+              <TouchableOpacity
+                style={styles.reliefAddBtn}
+                onPress={() =>
+                  setReliefLines((prev) => [
+                    ...prev,
+                    { label: "", quantity: "1", unit: "" },
+                  ])
+                }
+              >
+                <MaterialIcons name="add" size={20} color={COLORS.primary} />
+                <Text style={styles.reliefAddText}>Thêm dòng</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {/* Số điện thoại */}
           <View style={styles.field}>
@@ -613,7 +742,7 @@ export default function CreateRequestScreen({ navigation }) {
             ) : (
               <>
                 <MaterialIcons name="send" size={22} color={COLORS.white} />
-                <Text style={styles.submitBtnText}>GỬI YÊU CẦU CỨU HỘ</Text>
+                <Text style={styles.submitBtnText}>GỬI YÊU CẦU</Text>
               </>
             )}
           </TouchableOpacity>
@@ -722,6 +851,30 @@ const styles = StyleSheet.create({
     textAlign: "right",
     marginTop: 4,
   },
+  fieldHint: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  reliefLineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  reliefInputLabel: { flex: 1, paddingVertical: 10, paddingHorizontal: 12 },
+  reliefInputQty: { width: 56, paddingVertical: 10, textAlign: "center" },
+  reliefInputUnit: { width: 76, paddingVertical: 10, paddingHorizontal: 8 },
+  reliefRemoveBtn: { padding: 4 },
+  reliefAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  reliefAddText: { fontSize: 14, color: COLORS.primary, fontWeight: "600" },
   categoryGrid: {
     flexDirection: "row",
     justifyContent: "space-between",

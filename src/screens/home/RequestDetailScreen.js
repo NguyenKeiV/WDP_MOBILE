@@ -268,7 +268,7 @@ export default function RequestDetailScreen({ route, navigation }) {
         >
           <MaterialIcons name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết yêu cầu cứu trợ</Text>
+        <Text style={styles.headerTitle}>Chi tiết yêu cầu</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -320,6 +320,32 @@ export default function RequestDetailScreen({ route, navigation }) {
             </View>
           )}
         </View>
+
+        {/* Nhu yếu phẩm — cứu trợ */}
+        {data.category === "relief" &&
+        Array.isArray(data.relief_needs) &&
+        data.relief_needs.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons
+                name="inventory-2"
+                size={18}
+                color={COLORS.primary}
+              />
+              <Text style={styles.sectionTitle}>Nhu yếu phẩm cần hỗ trợ</Text>
+            </View>
+            {data.relief_needs.map((it, idx) => (
+              <View key={`rn-${idx}`} style={styles.reliefNeedRow}>
+                <Text style={styles.reliefNeedLabel}>
+                  • {it.label || "—"}
+                  {it.unit
+                    ? ` — ${it.quantity ?? 0} ${it.unit}`
+                    : ` — ${it.quantity ?? 0}`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {/* Mô tả */}
         <View style={styles.section}>
@@ -633,6 +659,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statusText: { fontSize: 16, fontWeight: "700" },
+  reliefNeedRow: { marginBottom: 6 },
+  reliefNeedLabel: { fontSize: 15, color: COLORS.text, lineHeight: 22 },
   section: {
     backgroundColor: COLORS.white,
     borderRadius: 14,
