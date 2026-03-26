@@ -24,4 +24,11 @@ export const requestsApi = {
     apiClient.post("/rescue-requests/link-to-me", {
       request_ids: Array.isArray(requestIds) ? requestIds : [],
     }),
+
+  // Người dân xác nhận đã được cứu hộ / phản hồi kết quả
+  citizenConfirmRescue: (id, confirmed, feedback_notes = "") =>
+    apiClient.post(`/rescue-requests/${id}/citizen-confirm-rescue`, {
+      confirmed,
+      feedback_notes,
+    }),
 };

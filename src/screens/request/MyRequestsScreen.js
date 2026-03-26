@@ -10,7 +10,10 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { useAuth } from "../../context/AuthContext";
@@ -64,7 +67,9 @@ const StatusFilter = ({ selected, onSelect }) => {
             <View
               style={[
                 styles.filterIconCircle,
-                isActive ? styles.filterIconCircleActive : styles.filterIconCircleInactive,
+                isActive
+                  ? styles.filterIconCircleActive
+                  : styles.filterIconCircleInactive,
               ]}
             >
               <MaterialIcons
@@ -74,10 +79,7 @@ const StatusFilter = ({ selected, onSelect }) => {
               />
             </View>
             <Text
-              style={[
-                styles.filterLabel,
-                isActive && styles.filterLabelActive,
-              ]}
+              style={[styles.filterLabel, isActive && styles.filterLabelActive]}
               numberOfLines={1}
             >
               {o.label}
@@ -226,8 +228,7 @@ export default function MyRequestsScreen({ navigation }) {
         }
 
         list.sort(
-          (a, b) =>
-            new Date(b.created_at || 0) - new Date(a.created_at || 0),
+          (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0),
         );
         setRequests(list);
       } catch (e) {
@@ -258,6 +259,24 @@ export default function MyRequestsScreen({ navigation }) {
     ]);
   };
 
+  const openUserMenu = () => {
+    const fallbackPhone =
+      requests.find((r) => /^0\d{9}$/.test(String(r?.phone_number || "")))
+        ?.phone_number || "";
+
+    Alert.alert("Menu người dùng", "Chọn thao tác", [
+      {
+        text: "Lịch sử quyên góp",
+        onPress: () =>
+          navigation.navigate("CharityDonationHistory", {
+            donorPhone: fallbackPhone,
+          }),
+      },
+      { text: "Đăng xuất", style: "destructive", onPress: handleLogout },
+      { text: "Đóng", style: "cancel" },
+    ]);
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchMyRequests(statusFilter);
@@ -285,11 +304,7 @@ export default function MyRequestsScreen({ navigation }) {
     <View style={styles.emptyContainer}>
       <View style={styles.emptyCircle}>
         <View style={styles.emptyIconWrap}>
-          <MaterialIcons
-            name="menu-book"
-            size={56}
-            color={C.mutedGray}
-          />
+          <MaterialIcons name="menu-book" size={56} color={C.mutedGray} />
           <View style={styles.emptyIconBadge}>
             <MaterialIcons name="info" size={24} color={C.primary} />
           </View>
@@ -297,8 +312,8 @@ export default function MyRequestsScreen({ navigation }) {
       </View>
       <Text style={styles.emptyTitle}>Chưa có yêu cầu nào</Text>
       <Text style={styles.emptyText}>
-        Các yêu cầu cứu hộ hoặc cứu trợ bạn đã gửi sẽ hiển thị tại đây để bạn
-        dễ dàng theo dõi.
+        Các yêu cầu cứu hộ hoặc cứu trợ bạn đã gửi sẽ hiển thị tại đây để bạn dễ
+        dàng theo dõi.
       </Text>
       <TouchableOpacity
         style={styles.createBtn}
@@ -337,11 +352,11 @@ export default function MyRequestsScreen({ navigation }) {
             </View>
             <TouchableOpacity
               style={styles.logoutBtn}
-              onPress={handleLogout}
+              onPress={openUserMenu}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="logout" size={18} color={C.textMuted} />
-              <Text style={styles.logoutText}>Thoát</Text>
+              <MaterialIcons name="person" size={18} color={C.textMuted} />
+              <Text style={styles.logoutText}>Menu</Text>
             </TouchableOpacity>
           </View>
           <StatusFilter selected={statusFilter} onSelect={setStatusFilter} />
@@ -362,9 +377,7 @@ export default function MyRequestsScreen({ navigation }) {
           renderEmptyState()
         ) : (
           <View style={styles.listSection}>
-            <Text style={styles.listSubtitle}>
-              {requests.length} yêu cầu
-            </Text>
+            <Text style={styles.listSubtitle}>{requests.length} yêu cầu</Text>
             {requests.map((item) => (
               <MyRequestCard
                 key={item.id}

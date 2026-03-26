@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  TextInput,
+  Alert,
 } from "react-native";
 import {
   SafeAreaView,
@@ -17,6 +19,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MapView, { Marker } from "react-native-maps";
 
 import { requestsApi } from "../../api/requests";
+import { useAuth } from "../../context/AuthContext";
 import { COLORS, STATUS_CONFIG, CATEGORIES, PRIORITIES } from "../../constants";
 
 const STATUS_ICONS = {
@@ -31,8 +34,11 @@ const STATUS_ICONS = {
 export default function RequestDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { id } = route.params;
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState("");
+  const [submittingConfirmation, setSubmittingConfirmation] = useState(false);
 
   useEffect(() => {
     requestsApi
@@ -54,11 +60,111 @@ export default function RequestDetailScreen({ route, navigation }) {
 
   if (!data) return null;
 
+  const parseCitizenConfirmation = (value) => {
+    if (!value) return null;
+
+    if (typeof value === "object") {
+      return {
+        confirmed: typeof value.confirmed === "boolean" ? value.confirmed : null,
+        feedback_notes:
+          typeof value.feedback_notes === "string"
+            ? value.feedback_notes.trim()
+            : "",
+        created_at: value.confirmed_at || value.created_at || value.updated_at || null,
+      };
+    }
+
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return {
+          confirmed:
+            typeof parsed.confirmed === "boolean" ? parsed.confirmed : null,
+          feedback_notes:
+            typeof parsed.feedback_notes === "string"
+              ? parsed.feedback_notes.trim()
+              : "",
+          created_at:
+            parsed.confirmed_at || parsed.created_at || parsed.updated_at || null,
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  };
+
   const status = STATUS_CONFIG[data.status] || STATUS_CONFIG.new;
   const category = CATEGORIES.find((c) => c.value === data.category);
   const priority = PRIORITIES.find((p) => p.value === data.priority);
   const statusIcon = STATUS_ICONS[data.status] || "info";
   const contentPadding = { paddingBottom: (insets.bottom || 24) + 24 };
+
+  const citizenConfirmation = parseCitizenConfirmation(data.citizen_confirmation);
+  const isCreatorUser =
+    user?.role === "user" &&
+    (user?.id === data.creator?.id ||
+      user?.id === data.creator_id ||
+      user?.id === data.user_id);
+  const canCitizenConfirm =
+    data.status === "completed" && isCreatorUser && !citizenConfirmation;
+  const shouldShowCitizenConfirmationSection =
+    (data.status === "completed" && isCreatorUser) || !!citizenConfirmation;
+
+  const formatCitizenConfirmationTime = (isoString) => {
+    if (!isoString) return null;
+    const d = new Date(isoString);
+    return d.toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const submitCitizenConfirmation = async (confirmed) => {
+    try {
+      setSubmittingConfirmation(true);
+      const trimmedFeedback = feedback.trim();
+      const res = await requestsApi.citizenConfirmRescue(
+        data.id,
+        confirmed,
+        trimmedFeedback,
+      );
+
+      const returnedRequest =
+        res?.data && typeof res.data === "object" && res.data.id ? res.data : null;
+
+      const nextConfirmation =
+        returnedRequest?.citizen_confirmation || {
+          confirmed,
+          feedback_notes: trimmedFeedback,
+          created_at: new Date().toISOString(),
+        };
+
+      setData((prev) => ({
+        ...(prev || {}),
+        ...(returnedRequest || {}),
+        citizen_confirmation: nextConfirmation,
+      }));
+
+      Alert.alert(
+        "Đã gửi xác nhận",
+        confirmed
+          ? "Cảm ơn bạn đã xác nhận đã nhận được hỗ trợ."
+          : "Phản hồi của bạn đã được gửi để đội ngũ kiểm tra thêm.",
+      );
+    } catch (error) {
+      Alert.alert(
+        "Không thể gửi xác nhận",
+        error?.message || "Vui lòng thử lại sau ít phút.",
+      );
+    } finally {
+      setSubmittingConfirmation(false);
+    }
+  };
 
   const Row = ({ icon, label, value, valueStyle }) => (
     <View style={styles.row}>
@@ -327,14 +433,116 @@ export default function RequestDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Ghi chú */}
-        {data.notes && (
+        {/* Xác nhận từ người dân */}
+        {shouldShowCitizenConfirmationSection && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <MaterialIcons name="notes" size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Ghi chú nội bộ</Text>
+              <MaterialIcons name="fact-check" size={18} color={COLORS.primary} />
+              <Text style={styles.sectionTitle}>Xác nhận từ người dân</Text>
             </View>
-            <Text style={styles.noteText}>{data.notes}</Text>
+
+            {citizenConfirmation ? (
+              <View style={styles.confirmationResultCard}>
+                <View
+                  style={[
+                    styles.confirmationBadge,
+                    citizenConfirmation.confirmed === true
+                      ? styles.confirmationBadgeSuccess
+                      : styles.confirmationBadgeWarning,
+                  ]}
+                >
+                  <MaterialIcons
+                    name={
+                      citizenConfirmation.confirmed === true
+                        ? "check-circle"
+                        : "error-outline"
+                    }
+                    size={16}
+                    color={
+                      citizenConfirmation.confirmed === true ? "#047857" : "#b45309"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.confirmationBadgeText,
+                      citizenConfirmation.confirmed === true
+                        ? styles.confirmationBadgeTextSuccess
+                        : styles.confirmationBadgeTextWarning,
+                    ]}
+                  >
+                    {citizenConfirmation.confirmed === true
+                      ? "Đã xác nhận đã nhận hỗ trợ"
+                      : "Đã báo chưa được giải quyết đầy đủ"}
+                  </Text>
+                </View>
+
+                {citizenConfirmation.feedback_notes ? (
+                  <Text style={styles.confirmationFeedbackText}>
+                    {citizenConfirmation.feedback_notes}
+                  </Text>
+                ) : (
+                  <Text style={styles.confirmationMutedText}>Không có phản hồi thêm.</Text>
+                )}
+
+                {formatCitizenConfirmationTime(citizenConfirmation.created_at) && (
+                  <Text style={styles.confirmationMetaText}>
+                    Gửi lúc {formatCitizenConfirmationTime(citizenConfirmation.created_at)}
+                  </Text>
+                )}
+              </View>
+            ) : canCitizenConfirm ? (
+              <>
+                <Text style={styles.confirmationHint}>
+                  Vui lòng xác nhận kết quả hỗ trợ để hệ thống cập nhật chính xác.
+                </Text>
+
+                <TextInput
+                  value={feedback}
+                  onChangeText={setFeedback}
+                  placeholder="Nhập phản hồi thêm (không bắt buộc)"
+                  placeholderTextColor={COLORS.textLight}
+                  multiline
+                  textAlignVertical="top"
+                  style={styles.feedbackInput}
+                />
+
+                <View style={styles.confirmationActions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmActionBtn,
+                      styles.confirmActionBtnPrimary,
+                      submittingConfirmation && styles.confirmActionBtnDisabled,
+                    ]}
+                    activeOpacity={0.88}
+                    disabled={submittingConfirmation}
+                    onPress={() => submitCitizenConfirmation(true)}
+                  >
+                    <MaterialIcons name="check-circle" size={18} color="#fff" />
+                    <Text style={styles.confirmActionBtnPrimaryText}>Đã nhận hỗ trợ</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.confirmActionBtn,
+                      styles.confirmActionBtnSecondary,
+                      submittingConfirmation && styles.confirmActionBtnDisabled,
+                    ]}
+                    activeOpacity={0.88}
+                    disabled={submittingConfirmation}
+                    onPress={() => submitCitizenConfirmation(false)}
+                  >
+                    <MaterialIcons name="report-problem" size={18} color="#b45309" />
+                    <Text style={styles.confirmActionBtnSecondaryText}>
+                      Chưa giải quyết đủ
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.confirmationHint}>
+                Trạng thái này không thể gửi xác nhận từ tài khoản hiện tại.
+              </Text>
+            )}
           </View>
         )}
 
@@ -567,4 +775,106 @@ const styles = StyleSheet.create({
   timelineTimeSuccess: { color: "#10b981", fontWeight: "700" },
   timelineLabel: { fontSize: 13, color: COLORS.text },
   timelineLabelStrong: { fontWeight: "700" },
+  confirmationHint: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  feedbackInput: {
+    minHeight: 96,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.25)",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  confirmationActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  confirmActionBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  confirmActionBtnPrimary: {
+    backgroundColor: "#10b981",
+  },
+  confirmActionBtnSecondary: {
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fdba74",
+  },
+  confirmActionBtnDisabled: {
+    opacity: 0.6,
+  },
+  confirmActionBtnPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.white,
+  },
+  confirmActionBtnSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#b45309",
+  },
+  confirmationResultCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.2)",
+    padding: 12,
+  },
+  confirmationBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  confirmationBadgeSuccess: {
+    backgroundColor: "#ecfdf5",
+  },
+  confirmationBadgeWarning: {
+    backgroundColor: "#fffbeb",
+  },
+  confirmationBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  confirmationBadgeTextSuccess: {
+    color: "#047857",
+  },
+  confirmationBadgeTextWarning: {
+    color: "#b45309",
+  },
+  confirmationFeedbackText: {
+    fontSize: 14,
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+  confirmationMutedText: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    fontStyle: "italic",
+  },
+  confirmationMetaText: {
+    marginTop: 10,
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
 });

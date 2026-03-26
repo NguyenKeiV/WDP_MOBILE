@@ -201,10 +201,14 @@ export default function CreateRequestScreen({ navigation }) {
     try {
       let media_urls = [];
       if (mediaUris.length > 0) {
-        const urls = await Promise.all(
-          mediaUris.map((uri) => uploadImage(uri)),
-        );
+        const urls = await Promise.all(mediaUris.map((uri) => uploadImage(uri)));
         media_urls = urls.filter(Boolean);
+
+        if (media_urls.length !== mediaUris.length) {
+          throw new Error(
+            "Một số ảnh chưa upload thành công. Vui lòng kiểm tra kết nối và thử lại.",
+          );
+        }
       }
       const res = await requestsApi.create({
         ...form,
