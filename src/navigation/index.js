@@ -81,6 +81,16 @@ function isVehicleReturnReminderPayload(data) {
   return data.type === "mission_completed_return_vehicle";
 }
 
+function isVolunteerReviewPayload(data) {
+  if (!data || typeof data !== "object") return false;
+  return data.type === "volunteer_review";
+}
+
+function resolveVolunteerRegistrationId(data) {
+  if (!data || typeof data !== "object") return null;
+  return data.registration_id || data.registrationId || data.id || null;
+}
+
 async function buildCampaignNotificationBody(campaignId) {
   if (!campaignId) {
     return "Hãy xem chi tiết đợt quyên góp mới để tham gia.";
@@ -115,6 +125,22 @@ function openCharityCampaignDetail(campaignId) {
 function openVehicleReturnTab() {
   if (!navigationRef.isReady()) return;
   navigationRef.navigate("RescueTeamTabs", { screen: "VehicleReturn" });
+}
+
+function openVolunteerRegistrationDetail(registrationId) {
+  if (!registrationId) {
+    Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+    return;
+  }
+  if (!navigationRef.isReady()) return;
+
+  navigationRef.navigate("MainTabs", {
+    screen: "Volunteer",
+    params: {
+      screen: "VolunteerDetail",
+      params: { id: registrationId },
+    },
+  });
 }
 
 function TabBarIcon({ name, focused, label }) {
@@ -245,6 +271,21 @@ function MainTabs() {
             }}
           />
         ) : null}
+        {isCitizen ? (
+          <Tab.Screen
+            name="CharityDonationHistoryTab"
+            component={CharityDonationHistoryScreen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <TabBarIcon
+                  name="menu-book"
+                  focused={focused}
+                  label="Quyên góp"
+                />
+              ),
+            }}
+          />
+        ) : null}
       </Tab.Navigator>
 
       {showPoster && activeCampaign && (
@@ -352,6 +393,16 @@ export default function AppNavigator() {
       return;
     }
 
+    if (isVolunteerReviewPayload(data)) {
+      const registrationId = resolveVolunteerRegistrationId(data);
+      if (!registrationId) {
+        Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+        return;
+      }
+      openVolunteerRegistrationDetail(registrationId);
+      return;
+    }
+
     if (!isCharityCampaignPayload(data)) return;
 
     const campaignId = resolveCampaignId(data);
@@ -383,6 +434,23 @@ export default function AppNavigator() {
             content: {
               title: "Nhắc trả phương tiện",
               body: "Nhiệm vụ đã hoàn thành. Vui lòng trả phương tiện về kho.",
+              data,
+            },
+            trigger: null,
+          });
+          return;
+        }
+
+        if (isVolunteerReviewPayload(data)) {
+          // Hiện local notification để người dùng thấy ngay khi app đang mở
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title:
+                notification?.request?.content?.title ||
+                "Cập nhật đăng ký tình nguyện",
+              body:
+                notification?.request?.content?.body ||
+                "Mở app để xem chi tiết đăng ký.",
               data,
             },
             trigger: null,

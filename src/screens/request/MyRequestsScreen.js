@@ -259,24 +259,6 @@ export default function MyRequestsScreen({ navigation }) {
     ]);
   };
 
-  const openUserMenu = () => {
-    const fallbackPhone =
-      requests.find((r) => /^0\d{9}$/.test(String(r?.phone_number || "")))
-        ?.phone_number || "";
-
-    Alert.alert("Menu người dùng", "Chọn thao tác", [
-      {
-        text: "Lịch sử quyên góp",
-        onPress: () =>
-          navigation.navigate("CharityDonationHistory", {
-            donorPhone: fallbackPhone,
-          }),
-      },
-      { text: "Đăng xuất", style: "destructive", onPress: handleLogout },
-      { text: "Đóng", style: "cancel" },
-    ]);
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchMyRequests(statusFilter);
@@ -352,11 +334,11 @@ export default function MyRequestsScreen({ navigation }) {
             </View>
             <TouchableOpacity
               style={styles.logoutBtn}
-              onPress={openUserMenu}
+              onPress={handleLogout}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="person" size={18} color={C.textMuted} />
-              <Text style={styles.logoutText}>Menu</Text>
+              <MaterialIcons name="logout" size={18} color={C.textMuted} />
+              <Text style={styles.logoutText}>Đăng xuất</Text>
             </TouchableOpacity>
           </View>
           <StatusFilter selected={statusFilter} onSelect={setStatusFilter} />

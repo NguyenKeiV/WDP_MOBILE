@@ -166,7 +166,7 @@ export default function CreateRequestScreen({ navigation }) {
     const fetchSupplies = async () => {
       setSuppliesLoading(true);
       try {
-        const res = await suppliesApi.getPublicSupplies({ limit: 500 });
+        const res = await suppliesApi.getAllSupplies({ limit: 500 });
         setSuppliesCatalog(Array.isArray(res.data) ? res.data : []);
       } catch (e) {
         setSuppliesCatalog([]);
