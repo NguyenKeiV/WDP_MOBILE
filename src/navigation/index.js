@@ -86,6 +86,11 @@ function isVolunteerReviewPayload(data) {
   return data.type === "volunteer_review";
 }
 
+function isSupplyDistributedPayload(data) {
+  if (!data || typeof data !== "object") return false;
+  return data.type === "supply_distributed";
+}
+
 function resolveVolunteerRegistrationId(data) {
   if (!data || typeof data !== "object") return null;
   return data.registration_id || data.registrationId || data.id || null;
@@ -141,6 +146,11 @@ function openVolunteerRegistrationDetail(registrationId) {
       params: { id: registrationId },
     },
   });
+}
+
+function openInventoryTab() {
+  if (!navigationRef.isReady()) return;
+  navigationRef.navigate("RescueTeamTabs", { screen: "Inventory" });
 }
 
 function TabBarIcon({ name, focused, label }) {
@@ -403,6 +413,15 @@ export default function AppNavigator() {
       return;
     }
 
+    if (isSupplyDistributedPayload(data)) {
+      openInventoryTab();
+      Alert.alert(
+        "📦 Nhận vật tư mới",
+        "Manager đã cấp vật tư cho đội của bạn. Vui lòng kiểm tra mục Kiểm kê.",
+      );
+      return;
+    }
+
     if (!isCharityCampaignPayload(data)) return;
 
     const campaignId = resolveCampaignId(data);
@@ -426,59 +445,10 @@ export default function AppNavigator() {
     }
 
     receivedListener.current = Notifications.addNotificationReceivedListener(
-      async (notification) => {
-        const data = notification?.request?.content?.data;
-
-        if (isVehicleReturnReminderPayload(data)) {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "Nhắc trả phương tiện",
-              body: "Nhiệm vụ đã hoàn thành. Vui lòng trả phương tiện về kho.",
-              data,
-            },
-            trigger: null,
-          });
-          return;
-        }
-
-        if (isVolunteerReviewPayload(data)) {
-          // Hiện local notification để người dùng thấy ngay khi app đang mở
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title:
-                notification?.request?.content?.title ||
-                "Cập nhật đăng ký tình nguyện",
-              body:
-                notification?.request?.content?.body ||
-                "Mở app để xem chi tiết đăng ký.",
-              data,
-            },
-            trigger: null,
-          });
-          return;
-        }
-
-        if (!isCharityCampaignPayload(data)) return;
-
-        const campaignId = resolveCampaignId(data);
-        if (!campaignId) {
-          Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
-          return;
-        }
-
-        const body = await buildCampaignNotificationBody(campaignId);
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Có đợt quyên góp mới",
-            body,
-            data: {
-              type: "charity_campaign",
-              campaign_id: campaignId,
-            },
-            categoryIdentifier: CHARITY_NOTIFICATION_CATEGORY_ID,
-          },
-          trigger: null,
-        });
+      async (_notification) => {
+        // Push notification đã được hiển thị tự động bởi setNotificationHandler
+        // (shouldShowAlert: true). Không cần tạo thêm local notification.
+        // Listener này chỉ dùng cho side-effects nếu cần trong tương lai.
       },
     );
 

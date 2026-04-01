@@ -73,7 +73,6 @@ export async function registerForPushNotifications() {
       });
     }
 
-    // Thử lấy token không cần projectId (Expo Go)
     console.log("🔔 Getting push token...");
     const tokenData = await Notifications.getExpoPushTokenAsync();
     console.log("✅ Token data:", tokenData);
@@ -95,17 +94,44 @@ export async function registerForPushNotifications() {
   }
 }
 
-export async function savePushTokenToServer(token) {
-  try {
-    await apiClient.put("/users/push-token", { token });
-    console.log("✅ Token saved to server");
-    return { ok: true, reason: null };
-  } catch (error) {
-    console.error("❌ Failed to save push token:", error.message);
-    console.error("❌ Error details:", JSON.stringify(error?.response?.data));
-    return {
-      ok: false,
-      reason: error?.message || "Cannot save token",
-    };
+/**
+ * Gửi push token lên server với timeout dài hơn và retry.
+ * Server Render.com free tier có thể cold start chậm.
+ */
+export async function savePushTokenToServer(token, retries = 2) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📤 Saving push token (attempt ${attempt}/${retries})...`);
+
+      // Dùng timeout riêng 30s thay vì 15s mặc định của apiClient
+      await apiClient.put("/users/push-token", { token }, { timeout: 30000 });
+
+      console.log("✅ Token saved to server");
+      return { ok: true, reason: null };
+    } catch (error) {
+      const isTimeout =
+        error?.code === "ECONNABORTED" ||
+        (error?.message || "").toLowerCase().includes("timeout");
+
+      console.warn(
+        `⚠️ Attempt ${attempt} failed: ${error?.message}`,
+        isTimeout ? "(timeout)" : "",
+      );
+
+      // Nếu còn lượt retry và là lỗi timeout → đợi rồi thử lại
+      if (attempt < retries && isTimeout) {
+        const delay = attempt * 3000; // 3s, 6s...
+        console.log(`⏳ Retrying in ${delay / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // Hết retry hoặc lỗi không phải timeout → trả về lỗi nhưng không crash app
+      console.error("❌ Failed to save push token:", error?.message);
+      return {
+        ok: false,
+        reason: error?.message || "Cannot save token",
+      };
+    }
   }
 }

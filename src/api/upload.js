@@ -1,6 +1,23 @@
+import * as ImageManipulator from "expo-image-manipulator";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const BASE_URL = "https://wdp-be-x41z.onrender.com/api";
+
+/**
+ * Convert HEIC/HEIF ảnh iPhone → JPEG trước khi upload.
+ * Các định dạng khác giữ nguyên URI.
+ */
+async function convertToJpeg(uri) {
+  const ext = (uri.split(".").pop() || "").toLowerCase();
+  if (ext === "heic" || ext === "heif") {
+    const result = await ImageManipulator.manipulateAsync(uri, [], {
+      compress: 0.85,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    return result.uri;
+  }
+  return uri;
+}
 
 /**
  * Upload một ảnh lên server, trả về URL công khai.
@@ -10,6 +27,10 @@ const BASE_URL = "https://wdp-be-x41z.onrender.com/api";
 export async function uploadImage(uri) {
   try {
     const token = await AsyncStorage.getItem("auth_token");
+
+    // Convert HEIC/HEIF → JPEG để backend chấp nhận
+    uri = await convertToJpeg(uri);
+
     const formData = new FormData();
 
     const fileNameFromUri = uri?.split("/").pop() || `photo_${Date.now()}.jpg`;
@@ -20,8 +41,6 @@ export async function uploadImage(uri) {
       png: "image/png",
       webp: "image/webp",
       gif: "image/gif",
-      heic: "image/heic",
-      heif: "image/heif",
     };
     const mimeType = mimeByExt[ext] || "image/jpeg";
 
@@ -58,7 +77,8 @@ export async function uploadImage(uri) {
     }
 
     const url = data?.url || data?.data?.url || null;
-    if (!url) throw new Error("Upload thành công nhưng không nhận được URL ảnh");
+    if (!url)
+      throw new Error("Upload thành công nhưng không nhận được URL ảnh");
 
     return url;
   } catch (error) {
