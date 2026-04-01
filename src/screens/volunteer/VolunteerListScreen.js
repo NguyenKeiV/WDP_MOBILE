@@ -94,6 +94,16 @@ export default function VolunteerListScreen({ navigation }) {
           </Text>
         </View>
 
+        <TouchableOpacity
+          style={styles.invitationBanner}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("MyInvitations")}
+        >
+          <MaterialIcons name="mail-outline" size={22} color={C.primary} />
+          <Text style={styles.invitationBannerText}>Lời mời của tôi</Text>
+          <MaterialIcons name="chevron-right" size={22} color={C.primary} />
+        </TouchableOpacity>
+
         <View style={styles.notice}>
           <MaterialIcons name="info-outline" size={18} color={C.primary} />
           <Text style={styles.noticeText}>
@@ -172,6 +182,23 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   subtitle: { fontSize: 14, color: C.textMuted, lineHeight: 20 },
+  invitationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#BBDEFB",
+  },
+  invitationBannerText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: C.primary,
+  },
   notice: {
     flexDirection: "row",
     alignItems: "flex-start",

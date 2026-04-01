@@ -133,7 +133,10 @@ export default function MissionDetailScreen({ route, navigation }) {
     const fetchVehicleInfo = async () => {
       setLoadingVehicleInfo(true);
       try {
-        const req = await missionsApi.getMyVehicleRequestByRescueRequest(mission.id);
+        const req = await missionsApi.getMyVehicleRequestByRescueRequest(
+          mission.id,
+          team?.id,
+        );
         setVehicleRequestInfo(req || null);
       } catch {
         setVehicleRequestInfo(null);
@@ -143,7 +146,7 @@ export default function MissionDetailScreen({ route, navigation }) {
     };
 
     fetchVehicleInfo();
-  }, [mission.id]);
+  }, [mission.id, team?.id]);
 
   const initRouting = async () => {
     setLoadingRoute(true);
@@ -269,7 +272,8 @@ export default function MissionDetailScreen({ route, navigation }) {
   const hasVehicleRequest = !!vehicleRequestInfo;
   const isVehicleApproved = vehicleStatus === "approved";
   const canReportMission =
-    mission.status === "on_mission" && (!hasVehicleRequest || isVehicleApproved);
+    mission.status === "on_mission" &&
+    (!hasVehicleRequest || isVehicleApproved);
 
   const handleSubmitExecutionReport = async ({ executed, outcome }) => {
     if (isAlreadyCompleted || completed) {
@@ -279,11 +283,16 @@ export default function MissionDetailScreen({ route, navigation }) {
 
     const isPartial = outcome === "partially_completed";
 
-    const reportNotes = isPartial ? partialNotes.trim() : completionNotes.trim();
+    const reportNotes = isPartial
+      ? partialNotes.trim()
+      : completionNotes.trim();
 
     if (isPartial) {
       if (!partialReason.trim()) {
-        Alert.alert("Thiếu thông tin", "Vui lòng nhập lý do hoàn thành một phần.");
+        Alert.alert(
+          "Thiếu thông tin",
+          "Vui lòng nhập lý do hoàn thành một phần.",
+        );
         return;
       }
       if (
@@ -291,7 +300,10 @@ export default function MissionDetailScreen({ route, navigation }) {
         Number.isNaN(Number(partialUnmetPeopleCount)) ||
         Number(partialUnmetPeopleCount) < 0
       ) {
-        Alert.alert("Thiếu thông tin", "Vui lòng nhập số người chưa được hỗ trợ hợp lệ.");
+        Alert.alert(
+          "Thiếu thông tin",
+          "Vui lòng nhập số người chưa được hỗ trợ hợp lệ.",
+        );
         return;
       }
     }
@@ -306,7 +318,9 @@ export default function MissionDetailScreen({ route, navigation }) {
       let reportMediaUrls = [];
       const sourceUris = isPartial ? partialMediaUris : completionMediaUris;
       if (sourceUris.length > 0) {
-        const urls = await Promise.all(sourceUris.map((uri) => uploadImage(uri)));
+        const urls = await Promise.all(
+          sourceUris.map((uri) => uploadImage(uri)),
+        );
         reportMediaUrls = urls.filter(Boolean);
       }
 
@@ -374,9 +388,10 @@ export default function MissionDetailScreen({ route, navigation }) {
         );
         imageUrls = urls.filter(Boolean);
       }
-      await missionsApi.reportIncomplete(mission.id, {
-        reason,
-        failure_media_urls: imageUrls,
+      await missionsApi.reportExecution(mission.id, {
+        outcome: "failed",
+        report_notes: reason,
+        report_media_urls: imageUrls,
       });
       setShowIncompleteModal(false);
       setIncompleteReason("");
@@ -410,48 +425,48 @@ export default function MissionDetailScreen({ route, navigation }) {
                 ? "#E8F5E9"
                 : partialReported
                   ? "#FFF8E1"
-                : executionReported
-                  ? "#EEF2FF"
-                : incompleteReported
-                  ? "#FFF3E0"
-                  : COLORS.primary + "15",
+                  : executionReported
+                    ? "#EEF2FF"
+                    : incompleteReported
+                      ? "#FFF3E0"
+                      : COLORS.primary + "15",
               borderColor: completed
                 ? "#388E3C30"
                 : partialReported
                   ? "#F9A82540"
-                : executionReported
-                  ? "#6366F140"
-                : incompleteReported
-                  ? "#F57C0040"
-                  : COLORS.primary + "30",
+                  : executionReported
+                    ? "#6366F140"
+                    : incompleteReported
+                      ? "#F57C0040"
+                      : COLORS.primary + "30",
             },
           ]}
         >
           <MaterialIcons
-              name={
-                completed
-                  ? "check-circle"
-                  : partialReported
-                    ? "pending-actions"
+            name={
+              completed
+                ? "check-circle"
+                : partialReported
+                  ? "pending-actions"
                   : executionReported
                     ? "pending-actions"
-                  : incompleteReported
-                    ? "report-problem"
-                    : "local-shipping"
-              }
+                    : incompleteReported
+                      ? "report-problem"
+                      : "local-shipping"
+            }
             size={24}
-              color={
-                completed
-                  ? "#388E3C"
-                  : partialReported
-                    ? "#F9A825"
+            color={
+              completed
+                ? "#388E3C"
+                : partialReported
+                  ? "#F9A825"
                   : executionReported
                     ? "#4F46E5"
                     : incompleteReported
                       ? "#E65100"
                       : COLORS.primary
-              }
-            />
+            }
+          />
           <Text
             style={[
               styles.statusBannerText,
@@ -460,11 +475,11 @@ export default function MissionDetailScreen({ route, navigation }) {
                   ? "#388E3C"
                   : partialReported
                     ? "#F9A825"
-                  : executionReported
-                    ? "#4F46E5"
-                  : incompleteReported
-                    ? "#E65100"
-                    : COLORS.primary,
+                    : executionReported
+                      ? "#4F46E5"
+                      : incompleteReported
+                        ? "#E65100"
+                        : COLORS.primary,
               },
             ]}
           >
@@ -472,11 +487,11 @@ export default function MissionDetailScreen({ route, navigation }) {
               ? "Nhiệm vụ đã hoàn thành"
               : partialReported
                 ? "Đã báo cáo hoàn thành một phần, chờ điều phối xác nhận"
-              : executionReported
-                ? "Đã gửi báo cáo, chờ điều phối xác nhận"
-              : incompleteReported
-                ? "Đã báo cáo không hoàn thành"
-                : "Đang thực hiện cứu hộ"}
+                : executionReported
+                  ? "Đã gửi báo cáo, chờ điều phối xác nhận"
+                  : incompleteReported
+                    ? "Đã báo cáo không hoàn thành"
+                    : "Đang thực hiện cứu hộ"}
           </Text>
         </View>
 
@@ -595,27 +610,27 @@ export default function MissionDetailScreen({ route, navigation }) {
 
         {/* Nhu yếu phẩm — cứu trợ */}
         {mission.category === "relief" &&
-        Array.isArray(mission.relief_needs) &&
-        mission.relief_needs.length > 0 && (
-          <View style={styles.card}>
-            <View style={styles.sectionHeader}>
-              <MaterialIcons
-                name="inventory-2"
-                size={18}
-                color={COLORS.textLight}
-              />
-              <Text style={styles.sectionTitle}>Nhu yếu phẩm cần hỗ trợ</Text>
+          Array.isArray(mission.relief_needs) &&
+          mission.relief_needs.length > 0 && (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <MaterialIcons
+                  name="inventory-2"
+                  size={18}
+                  color={COLORS.textLight}
+                />
+                <Text style={styles.sectionTitle}>Nhu yếu phẩm cần hỗ trợ</Text>
+              </View>
+              {mission.relief_needs.map((it, idx) => (
+                <Text key={`rn-${idx}`} style={styles.reliefNeedLine}>
+                  • {it.label || "—"}
+                  {it.unit
+                    ? ` — ${it.quantity ?? 0} ${it.unit}`
+                    : ` — ${it.quantity ?? 0}`}
+                </Text>
+              ))}
             </View>
-            {mission.relief_needs.map((it, idx) => (
-              <Text key={`rn-${idx}`} style={styles.reliefNeedLine}>
-                • {it.label || "—"}
-                {it.unit
-                  ? ` — ${it.quantity ?? 0} ${it.unit}`
-                  : ` — ${it.quantity ?? 0}`}
-              </Text>
-            ))}
-          </View>
-        )}
+          )}
 
         {/* Mô tả */}
         <View style={styles.card}>
@@ -764,7 +779,9 @@ export default function MissionDetailScreen({ route, navigation }) {
           {loadingVehicleInfo ? (
             <View style={styles.vehicleInfoLoading}>
               <ActivityIndicator size="small" color={COLORS.primary} />
-              <Text style={styles.vehicleInfoMuted}>Đang tải thông tin phương tiện...</Text>
+              <Text style={styles.vehicleInfoMuted}>
+                Đang tải thông tin phương tiện...
+              </Text>
             </View>
           ) : !hasVehicleRequest ? (
             <View style={styles.vehicleInfoBoxMuted}>
@@ -877,96 +894,103 @@ export default function MissionDetailScreen({ route, navigation }) {
         </View>
 
         {/* Báo cáo nhiệm vụ — CHỈ khi đang on_mission */}
-        {!completed && !incompleteReported && mission.status === "on_mission" && (
-          <View style={styles.missionActions}>
-            {!canReportMission && (
-              <View style={styles.vehicleInfoBoxMuted}>
-                <Text style={styles.vehicleInfoMuted}>
-                  Đội chưa được duyệt phương tiện. Vui lòng chờ điều phối viên/ quản lý cập nhật trước khi gửi báo cáo thực hiện.
+        {!completed &&
+          !incompleteReported &&
+          mission.status === "on_mission" && (
+            <View style={styles.missionActions}>
+              {!canReportMission && (
+                <View style={styles.vehicleInfoBoxMuted}>
+                  <Text style={styles.vehicleInfoMuted}>
+                    Đội chưa được duyệt phương tiện. Vui lòng chờ điều phối
+                    viên/ quản lý cập nhật trước khi gửi báo cáo thực hiện.
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.incompleteBtn,
+                  (completing || reportingIncomplete || reportingPartial) && {
+                    opacity: 0.7,
+                  },
+                  !canReportMission && { opacity: 0.5 },
+                ]}
+                onPress={() => setShowIncompleteModal(true)}
+                disabled={
+                  completing ||
+                  reportingIncomplete ||
+                  reportingPartial ||
+                  !canReportMission
+                }
+              >
+                <MaterialIcons name="cancel" size={22} color={COLORS.white} />
+                <Text style={styles.incompleteBtnText}>
+                  Báo cáo không hoàn thành
                 </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[
-                styles.incompleteBtn,
-                (completing || reportingIncomplete || reportingPartial) && {
-                  opacity: 0.7,
-                },
-                !canReportMission && { opacity: 0.5 },
-              ]}
-              onPress={() => setShowIncompleteModal(true)}
-              disabled={
-                completing ||
-                reportingIncomplete ||
-                reportingPartial ||
-                !canReportMission
-              }
-            >
-              <MaterialIcons name="cancel" size={22} color={COLORS.white} />
-              <Text style={styles.incompleteBtnText}>
-                Báo cáo không hoàn thành
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.completeBtn,
-                (completing || reportingIncomplete || reportingPartial) && {
-                  opacity: 0.7,
-                },
-                !canReportMission && { opacity: 0.5 },
-              ]}
-              onPress={() => setShowCompleteModal(true)}
-              disabled={
-                completing ||
-                reportingIncomplete ||
-                reportingPartial ||
-                !canReportMission
-              }
-            >
-              {completing ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <>
-                  <MaterialIcons
-                    name="check-circle"
-                    size={24}
-                    color={COLORS.white}
-                  />
-                  <Text style={styles.completeBtnText}>Hoàn thành nhiệm vụ</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.partialBtn,
-                (completing || reportingIncomplete || reportingPartial) && {
-                  opacity: 0.7,
-                },
-                !canReportMission && { opacity: 0.5 },
-              ]}
-              onPress={() => setShowPartialModal(true)}
-              disabled={
-                completing ||
-                reportingIncomplete ||
-                reportingPartial ||
-                !canReportMission
-              }
-            >
-              {reportingPartial ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <>
-                  <MaterialIcons
-                    name="checklist"
-                    size={22}
-                    color={COLORS.white}
-                  />
-                  <Text style={styles.partialBtnText}>Hoàn thành một phần</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.completeBtn,
+                  (completing || reportingIncomplete || reportingPartial) && {
+                    opacity: 0.7,
+                  },
+                  !canReportMission && { opacity: 0.5 },
+                ]}
+                onPress={() => setShowCompleteModal(true)}
+                disabled={
+                  completing ||
+                  reportingIncomplete ||
+                  reportingPartial ||
+                  !canReportMission
+                }
+              >
+                {completing ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <>
+                    <MaterialIcons
+                      name="check-circle"
+                      size={24}
+                      color={COLORS.white}
+                    />
+                    <Text style={styles.completeBtnText}>
+                      Hoàn thành nhiệm vụ
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.partialBtn,
+                  (completing || reportingIncomplete || reportingPartial) && {
+                    opacity: 0.7,
+                  },
+                  !canReportMission && { opacity: 0.5 },
+                ]}
+                onPress={() => setShowPartialModal(true)}
+                disabled={
+                  completing ||
+                  reportingIncomplete ||
+                  reportingPartial ||
+                  !canReportMission
+                }
+              >
+                {reportingPartial ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <>
+                    <MaterialIcons
+                      name="checklist"
+                      size={22}
+                      color={COLORS.white}
+                    />
+                    <Text style={styles.partialBtnText}>
+                      Hoàn thành một phần
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
 
         {/* Banner đã hoàn thành */}
         {completed && (

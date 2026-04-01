@@ -1,4 +1,22 @@
 /** Hình thức hỗ trợ — có thể khớp ENUM backend sau này */
+export const VOLUNTEER_INVITATION_STATUS = {
+  pending: {
+    label: "Chờ phản hồi",
+    color: "#F57F17",
+    bg: "#FFF8E1",
+  },
+  accepted: {
+    label: "Đã nhận lời",
+    color: "#2E7D32",
+    bg: "#E8F5E9",
+  },
+  declined: {
+    label: "Đã từ chối",
+    color: "#C62828",
+    bg: "#FFEBEE",
+  },
+};
+
 export const VOLUNTEER_SUPPORT_TYPES = [
   { value: "relief_distribution", label: "Phát nhu yếu phẩm", icon: "inventory-2" },
   { value: "transport", label: "Vận chuyển / logistics", icon: "local-shipping" },

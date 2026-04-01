@@ -32,6 +32,8 @@ import MapPickerScreen from "../screens/request/MapPickerScreen";
 import VolunteerListScreen from "../screens/volunteer/VolunteerListScreen";
 import VolunteerRegisterScreen from "../screens/volunteer/VolunteerRegisterScreen";
 import VolunteerDetailScreen from "../screens/volunteer/VolunteerDetailScreen";
+import MyInvitationsScreen from "../screens/volunteer/MyInvitationsScreen";
+import InvitationDetailScreen from "../screens/volunteer/InvitationDetailScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -96,6 +98,21 @@ function resolveVolunteerRegistrationId(data) {
   return data.registration_id || data.registrationId || data.id || null;
 }
 
+function isVolunteerCampaignInvitationPayload(data) {
+  if (!data || typeof data !== "object") return false;
+  return data.type === "volunteer_campaign_invitation";
+}
+
+function resolveInvitationId(data) {
+  if (!data || typeof data !== "object") return null;
+  return (
+    data.invitation_id ||
+    data.invitationId ||
+    data.id ||
+    null
+  );
+}
+
 async function buildCampaignNotificationBody(campaignId) {
   if (!campaignId) {
     return "Hãy xem chi tiết đợt quyên góp mới để tham gia.";
@@ -144,6 +161,22 @@ function openVolunteerRegistrationDetail(registrationId) {
     params: {
       screen: "VolunteerDetail",
       params: { id: registrationId },
+    },
+  });
+}
+
+function openInvitationDetail(invitationId) {
+  if (!invitationId) {
+    Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+    return;
+  }
+  if (!navigationRef.isReady()) return;
+
+  navigationRef.navigate("MainTabs", {
+    screen: "Volunteer",
+    params: {
+      screen: "InvitationDetail",
+      params: { id: invitationId },
     },
   });
 }
@@ -206,6 +239,16 @@ function VolunteerTabStack() {
         name="VolunteerDetail"
         component={VolunteerDetailScreen}
         options={{ title: "Chi tiết đăng ký" }}
+      />
+      <VolunteerStack.Screen
+        name="MyInvitations"
+        component={MyInvitationsScreen}
+        options={{ title: "Lời mời của tôi" }}
+      />
+      <VolunteerStack.Screen
+        name="InvitationDetail"
+        component={InvitationDetailScreen}
+        options={{ title: "Chi tiết lời mời" }}
       />
     </VolunteerStack.Navigator>
   );
@@ -392,6 +435,7 @@ export default function AppNavigator() {
   const receivedListener = useRef(null);
   const responseListener = useRef(null);
   const pendingCampaignIdRef = useRef(null);
+  const pendingInvitationIdRef = useRef(null);
 
   const handleNotificationDeepLink = useCallback((data) => {
     if (isVehicleReturnReminderPayload(data)) {
@@ -410,6 +454,20 @@ export default function AppNavigator() {
         return;
       }
       openVolunteerRegistrationDetail(registrationId);
+      return;
+    }
+
+    if (isVolunteerCampaignInvitationPayload(data)) {
+      const invitationId = resolveInvitationId(data);
+      if (!invitationId) {
+        Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+        return;
+      }
+      if (!navigationRef.isReady()) {
+        pendingInvitationIdRef.current = invitationId;
+        return;
+      }
+      openInvitationDetail(invitationId);
       return;
     }
 
@@ -445,6 +503,75 @@ export default function AppNavigator() {
     }
 
     receivedListener.current = Notifications.addNotificationReceivedListener(
+      async (notification) => {
+        const data = notification?.request?.content?.data;
+
+        if (isVehicleReturnReminderPayload(data)) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Nhắc trả phương tiện",
+              body: "Nhiệm vụ đã hoàn thành. Vui lòng trả phương tiện về kho.",
+              data,
+            },
+            trigger: null,
+          });
+          return;
+        }
+
+        if (isVolunteerReviewPayload(data)) {
+          // Hiện local notification để người dùng thấy ngay khi app đang mở
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title:
+                notification?.request?.content?.title ||
+                "Cập nhật đăng ký tình nguyện",
+              body:
+                notification?.request?.content?.body ||
+                "Mở app để xem chi tiết đăng ký.",
+              data,
+            },
+            trigger: null,
+          });
+          return;
+        }
+
+        if (isVolunteerCampaignInvitationPayload(data)) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title:
+                notification?.request?.content?.title ||
+                "Bạn được mời tham gia tình nguyện!",
+              body:
+                notification?.request?.content?.body ||
+                "Mở app để xem chi tiết đợt tình nguyện.",
+              data,
+            },
+            trigger: null,
+          });
+          return;
+        }
+
+        if (!isCharityCampaignPayload(data)) return;
+
+        const campaignId = resolveCampaignId(data);
+        if (!campaignId) {
+          Alert.alert("Thông báo", "Dữ liệu thông báo không hợp lệ");
+          return;
+        }
+
+        const body = await buildCampaignNotificationBody(campaignId);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Có đợt quyên góp mới",
+            body,
+            data: {
+              type: "charity_campaign",
+              campaign_id: campaignId,
+            },
+            categoryIdentifier: CHARITY_NOTIFICATION_CATEGORY_ID,
+          },
+          trigger: null,
+        });
       async (_notification) => {
         // Push notification đã được hiển thị tự động bởi setNotificationHandler
         // (shouldShowAlert: true). Không cần tạo thêm local notification.
@@ -484,6 +611,10 @@ export default function AppNavigator() {
         if (pendingCampaignIdRef.current) {
           openCharityCampaignDetail(pendingCampaignIdRef.current);
           pendingCampaignIdRef.current = null;
+        }
+        if (pendingInvitationIdRef.current) {
+          openInvitationDetail(pendingInvitationIdRef.current);
+          pendingInvitationIdRef.current = null;
         }
       }}
     >
