@@ -5,20 +5,30 @@ export const missionsApi = {
   getMyTeamMissions: () => apiClient.get("/rescue-requests/my-team-missions"),
 
   // Lấy yêu cầu phương tiện theo rescue request hiện tại của team
-  getMyVehicleRequestByRescueRequest: async (rescueRequestId) => {
+  getMyVehicleRequestByRescueRequest: async (
+    rescueRequestId,
+    teamId = null,
+  ) => {
     const res = await vehicleRequestsApi.getAll({
       rescue_request_id: rescueRequestId,
       limit: 20,
       page: 1,
     });
     const list = Array.isArray(res?.data) ? res.data : [];
+    const scoped = teamId
+      ? list.filter((v) => String(v?.team_id || "") === String(teamId))
+      : list;
     // ưu tiên bản ghi mới nhất theo created_at
-    const sorted = [...list].sort(
+    const sorted = [...scoped].sort(
       (a, b) =>
         new Date(b.created_at || 0).getTime() -
         new Date(a.created_at || 0).getTime(),
     );
-    return sorted.find((v) => String(v.rescue_request_id) === String(rescueRequestId)) || null;
+    return (
+      sorted.find(
+        (v) => String(v.rescue_request_id) === String(rescueRequestId),
+      ) || null
+    );
   },
 
   // THÊM MỚI
