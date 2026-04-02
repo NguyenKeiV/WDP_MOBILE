@@ -333,12 +333,12 @@ export default function MyRequestsScreen({ navigation }) {
               </Text>
             </View>
             <TouchableOpacity
-              style={styles.logoutBtn}
-              onPress={handleLogout}
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate("AccountSettings")}
               activeOpacity={0.8}
             >
-              <MaterialIcons name="logout" size={18} color={C.textMuted} />
-              <Text style={styles.logoutText}>Đăng xuất</Text>
+              <MaterialIcons name="settings" size={18} color={C.textMuted} />
+              <Text style={styles.settingsText}>Cài đặt</Text>
             </TouchableOpacity>
           </View>
           <StatusFilter selected={statusFilter} onSelect={setStatusFilter} />
@@ -417,6 +417,20 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   logoutText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: C.textMuted,
+  },
+  settingsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "hsl(210, 5%, 96%)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  settingsText: {
     fontSize: 12,
     fontWeight: "700",
     color: C.textMuted,

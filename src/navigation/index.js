@@ -20,6 +20,8 @@ import { CHARITY_NOTIFICATION_CATEGORY_ID } from "../utils/pushNotification";
 import WelcomeScreen from "../screens/auth/WelcomeScreen";
 import LoginScreen from "../screens/auth/LoginScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
+import ChangePasswordScreen from "../screens/auth/ChangePasswordScreen";
+import AccountSettingsScreen from "../screens/auth/AccountSettingsScreen";
 import RequestDetailScreen from "../screens/home/RequestDetailScreen";
 import CreateRequestScreen from "../screens/request/CreateRequestScreen";
 import MyRequestsScreen from "../screens/request/MyRequestsScreen";
@@ -637,6 +639,16 @@ export default function AppNavigator() {
                 component={CharityDonationHistoryScreen}
                 options={{ headerShown: true, title: "Lịch sử quyên góp" }}
               />
+              <Stack.Screen
+                name="ChangePassword"
+                component={ChangePasswordScreen}
+                options={{ headerShown: true, title: "Đổi mật khẩu" }}
+              />
+              <Stack.Screen
+                name="AccountSettings"
+                component={AccountSettingsScreen}
+                options={{ headerShown: true, title: "Cài đặt tài khoản" }}
+              />
             </>
           ) : (
             <>
@@ -663,6 +675,16 @@ export default function AppNavigator() {
                 name="CharityDonationHistory"
                 component={CharityDonationHistoryScreen}
                 options={{ headerShown: true, title: "Lịch sử quyên góp" }}
+              />
+              <Stack.Screen
+                name="ChangePassword"
+                component={ChangePasswordScreen}
+                options={{ headerShown: true, title: "Đổi mật khẩu" }}
+              />
+              <Stack.Screen
+                name="AccountSettings"
+                component={AccountSettingsScreen}
+                options={{ headerShown: true, title: "Cài đặt tài khoản" }}
               />
             </>
           )

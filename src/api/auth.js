@@ -13,4 +13,7 @@ export const authApi = {
     }),
 
   getProfile: () => apiClient.get("/users/profile"),
+
+  changePassword: (currentPassword, newPassword) =>
+    apiClient.put("/users/change-password", { currentPassword, newPassword }),
 };

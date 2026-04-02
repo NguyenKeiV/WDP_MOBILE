@@ -333,16 +333,21 @@ export default function MissionsScreen({ navigation }) {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <View>
-          <Text style={styles.title}>Nhiệm vụ của đội</Text>
-          {team && <Text style={styles.teamName}>{team.name}</Text>}
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.title}>Nhiệm vụ của đội</Text>
+            {team && <Text style={styles.teamName}>{team.name}</Text>}
+          </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate("AccountSettings")}
+            >
+              <MaterialIcons name="settings" size={18} color={COLORS.primary} />
+              <Text style={styles.settingsBtnText}>Cài đặt</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <MaterialIcons name="exit-to-app" size={18} color={COLORS.primary} />
-          <Text style={styles.logoutText}>Đăng xuất</Text>
-        </TouchableOpacity>
-      </View>
 
       {team && (
         <View style={styles.teamCard}>
@@ -616,6 +621,25 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
     marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  settingsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.primary + "1A",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  settingsBtnText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "700",
   },
   logoutBtn: {
     flexDirection: "row",
