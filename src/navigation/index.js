@@ -105,12 +105,7 @@ function isVolunteerCampaignInvitationPayload(data) {
 
 function resolveInvitationId(data) {
   if (!data || typeof data !== "object") return null;
-  return (
-    data.invitation_id ||
-    data.invitationId ||
-    data.id ||
-    null
-  );
+  return data.invitation_id || data.invitationId || data.id || null;
 }
 
 async function buildCampaignNotificationBody(campaignId) {
@@ -572,10 +567,6 @@ export default function AppNavigator() {
           },
           trigger: null,
         });
-      async (_notification) => {
-        // Push notification đã được hiển thị tự động bởi setNotificationHandler
-        // (shouldShowAlert: true). Không cần tạo thêm local notification.
-        // Listener này chỉ dùng cho side-effects nếu cần trong tương lai.
       },
     );
 

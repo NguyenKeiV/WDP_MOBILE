@@ -24,6 +24,7 @@ import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import { missionsApi } from "../../api/missions";
 import { uploadImage } from "../../api/upload";
+import { suppliesApi } from "../../api/supplies";
 import { COLORS, CATEGORIES } from "../../constants";
 
 const { width } = Dimensions.get("window");
@@ -65,6 +66,43 @@ async function fetchRoute(fromLat, fromLng, toLat, toLng) {
   }
 }
 
+function mapInventoryItem(item) {
+  return {
+    id: item?.supply?.id || `${item?.supply_id || "unknown"}`,
+    name: item?.supply?.name || "Mặt hàng không xác định",
+    unit: item?.supply?.unit || "đơn vị",
+    total_received: Number(item?.total_received || 0),
+    total_used: Number(item?.total_used || 0),
+    remaining: Number(item?.remaining || 0),
+  };
+}
+
+function aggregateFromDistributions(list) {
+  const bucket = {};
+
+  (Array.isArray(list) ? list : []).forEach((row) => {
+    const id = row?.supply?.id || row?.supply_id;
+    if (!id) return;
+
+    if (!bucket[id]) {
+      bucket[id] = {
+        id,
+        name: row?.supply?.name || "Mặt hàng không xác định",
+        unit: row?.supply?.unit || "đơn vị",
+        total_received: 0,
+        total_used: 0,
+        remaining: 0,
+      };
+    }
+
+    const qty = Number(row?.quantity || 0);
+    bucket[id].total_received += qty;
+    bucket[id].remaining += qty;
+  });
+
+  return Object.values(bucket);
+}
+
 export default function MissionDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { mission, team } = route.params;
@@ -93,6 +131,9 @@ export default function MissionDetailScreen({ route, navigation }) {
   const [partialNotes, setPartialNotes] = useState("");
   const [partialMediaUris, setPartialMediaUris] = useState([]);
   const [reportingPartial, setReportingPartial] = useState(false);
+  const [teamInventory, setTeamInventory] = useState([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [usageAmounts, setUsageAmounts] = useState({});
 
   const [myLocation, setMyLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
@@ -128,6 +169,41 @@ export default function MissionDetailScreen({ route, navigation }) {
       initRouting();
     }
   }, []);
+
+  useEffect(() => {
+    const shouldLoadInventory =
+      (showCompleteModal || showPartialModal) && mission.status === "on_mission";
+    if (!shouldLoadInventory) return;
+
+    const fetchInventory = async () => {
+      setInventoryLoading(true);
+      try {
+        const res = await suppliesApi.getMyTeamInventory();
+        const payload = res?.data || res;
+        const inventory = Array.isArray(payload?.inventory)
+          ? payload.inventory
+          : [];
+        setTeamInventory(inventory.map(mapInventoryItem));
+      } catch {
+        try {
+          const fallbackRes = await suppliesApi.getMyTeamDistributions({
+            page: 1,
+            limit: 200,
+          });
+          const fallbackData =
+            fallbackRes?.data?.data || fallbackRes?.data || fallbackRes;
+          const rows = Array.isArray(fallbackData) ? fallbackData : [];
+          setTeamInventory(aggregateFromDistributions(rows));
+        } catch {
+          setTeamInventory([]);
+        }
+      } finally {
+        setInventoryLoading(false);
+      }
+    };
+
+    fetchInventory();
+  }, [showCompleteModal, showPartialModal, mission.status]);
 
   useEffect(() => {
     const fetchVehicleInfo = async () => {
@@ -315,6 +391,20 @@ export default function MissionDetailScreen({ route, navigation }) {
     }
 
     try {
+      const usedItems = Object.entries(usageAmounts)
+        .filter(([, qty]) => Number(qty) > 0)
+        .map(([supplyId, qty]) => ({
+          supply_id: supplyId,
+          quantity_used: Number(qty),
+        }));
+
+      if (usedItems.length > 0) {
+        await suppliesApi.bulkReportUsage({
+          rescue_request_id: mission.id,
+          items: usedItems,
+        });
+      }
+
       let reportMediaUrls = [];
       const sourceUris = isPartial ? partialMediaUris : completionMediaUris;
       if (sourceUris.length > 0) {
@@ -343,11 +433,13 @@ export default function MissionDetailScreen({ route, navigation }) {
         setPartialReason("");
         setPartialNotes("");
         setPartialMediaUris([]);
+        setUsageAmounts({});
         setPartialReported(true);
       } else {
         setShowCompleteModal(false);
         setCompletionNotes("");
         setCompletionMediaUris([]);
+        setUsageAmounts({});
       }
 
       setExecutionReported(true);
@@ -365,6 +457,73 @@ export default function MissionDetailScreen({ route, navigation }) {
       setReportingIncomplete(false);
       setReportingPartial(false);
     }
+  };
+
+  const renderUsageSection = () => {
+    if (inventoryLoading) {
+      return (
+        <View style={styles.usageLoadingWrap}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.usageLoadingText}>Đang tải vật phẩm của đội...</Text>
+        </View>
+      );
+    }
+
+    if (!teamInventory.length) {
+      return (
+        <View style={styles.usageEmptyWrap}>
+          <Text style={styles.usageEmptyText}>
+            Đội chưa có vật phẩm trong kho hoặc không tải được dữ liệu tồn kho.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.usageSectionWrap}>
+        <Text style={styles.usageSectionTitle}>Vật phẩm đã sử dụng</Text>
+        <Text style={styles.usageSectionHint}>
+          Nhập số lượng đã dùng để hệ thống trừ trực tiếp vào kho đội.
+        </Text>
+
+        <ScrollView style={styles.usageListWrap} nestedScrollEnabled>
+          {teamInventory.map((item) => {
+            const maxQty = Math.max(Number(item.remaining || 0), 0);
+            return (
+              <View key={item.id} style={styles.usageItemRow}>
+                <View style={styles.usageItemInfo}>
+                  <Text style={styles.usageItemName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.usageItemMeta}>
+                    Còn: {maxQty} {item.unit}
+                  </Text>
+                </View>
+
+                <View style={styles.usageInputWrap}>
+                  <TextInput
+                    style={styles.usageInput}
+                    keyboardType="number-pad"
+                    placeholder="0"
+                    value={usageAmounts[item.id] || ""}
+                    onChangeText={(value) => {
+                      const cleaned = String(value || "").replace(/[^0-9]/g, "");
+                      const numeric = cleaned ? Number(cleaned) : 0;
+                      const bounded = Math.min(numeric, maxQty);
+                      setUsageAmounts((prev) => ({
+                        ...prev,
+                        [item.id]: cleaned === "" ? "" : String(bounded),
+                      }));
+                    }}
+                  />
+                  <Text style={styles.usageUnit}>{item.unit}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
   };
 
   const handleSubmitIncomplete = async () => {
@@ -1040,6 +1199,9 @@ export default function MissionDetailScreen({ route, navigation }) {
                 numberOfLines={3}
                 textAlignVertical="top"
               />
+
+              {renderUsageSection()}
+
               <TouchableOpacity
                 style={styles.modalAddPhotoBtn}
                 onPress={() => pickReportImages(setCompletionMediaUris)}
@@ -1082,7 +1244,10 @@ export default function MissionDetailScreen({ route, navigation }) {
               <View style={styles.modalCompleteActions}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
-                  onPress={() => setShowCompleteModal(false)}
+                  onPress={() => {
+                    setShowCompleteModal(false);
+                    setUsageAmounts({});
+                  }}
                   disabled={completing}
                 >
                   <Text style={styles.modalCancelText}>Hủy</Text>
@@ -1241,6 +1406,8 @@ export default function MissionDetailScreen({ route, navigation }) {
                 textAlignVertical="top"
               />
 
+              {renderUsageSection()}
+
               <TouchableOpacity
                 style={styles.modalAddPhotoBtn}
                 onPress={() => pickReportImages(setPartialMediaUris)}
@@ -1285,7 +1452,10 @@ export default function MissionDetailScreen({ route, navigation }) {
               <View style={styles.modalCompleteActions}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
-                  onPress={() => setShowPartialModal(false)}
+                  onPress={() => {
+                    setShowPartialModal(false);
+                    setUsageAmounts({});
+                  }}
                   disabled={reportingPartial}
                 >
                   <Text style={styles.modalCancelText}>Hủy</Text>
@@ -1663,6 +1833,97 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 72,
     marginBottom: 12,
+  },
+  usageSectionWrap: {
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    backgroundColor: COLORS.grayLight,
+    padding: 10,
+    marginBottom: 12,
+  },
+  usageSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  usageSectionHint: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  usageLoadingWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  usageLoadingText: {
+    fontSize: 12,
+    color: COLORS.textLight,
+  },
+  usageEmptyWrap: {
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 10,
+    backgroundColor: COLORS.grayLight,
+    padding: 10,
+    marginBottom: 12,
+  },
+  usageEmptyText: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    lineHeight: 17,
+  },
+  usageListWrap: {
+    maxHeight: 170,
+  },
+  usageItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ECEFF3",
+  },
+  usageItemInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  usageItemName: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  usageItemMeta: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
+  usageInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  usageInput: {
+    width: 56,
+    borderWidth: 1,
+    borderColor: COLORS.grayBorder,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    textAlign: "center",
+    fontSize: 13,
+    backgroundColor: COLORS.white,
+    color: COLORS.text,
+  },
+  usageUnit: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    minWidth: 32,
   },
   modalCountInput: {
     borderWidth: 1,

@@ -7,4 +7,9 @@ export const suppliesApi = {
   getMyTeamInventory: () => apiClient.get("/supplies/usages/my-team-inventory"),
   getMyTeamUsages: (params = {}) =>
     apiClient.get("/supplies/usages/my-team", { params }),
+  bulkReportUsage: ({ rescue_request_id, items }) =>
+    apiClient.post("/supplies/usages/bulk-report", {
+      rescue_request_id,
+      items: Array.isArray(items) ? items : [],
+    }),
 };
