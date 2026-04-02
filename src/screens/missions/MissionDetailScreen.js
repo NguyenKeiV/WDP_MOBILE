@@ -172,7 +172,8 @@ export default function MissionDetailScreen({ route, navigation }) {
 
   useEffect(() => {
     const shouldLoadInventory =
-      (showCompleteModal || showPartialModal) && mission.status === "on_mission";
+      (showCompleteModal || showPartialModal) &&
+      mission.status === "on_mission";
     if (!shouldLoadInventory) return;
 
     const fetchInventory = async () => {
@@ -464,7 +465,9 @@ export default function MissionDetailScreen({ route, navigation }) {
       return (
         <View style={styles.usageLoadingWrap}>
           <ActivityIndicator size="small" color={COLORS.primary} />
-          <Text style={styles.usageLoadingText}>Đang tải vật phẩm của đội...</Text>
+          <Text style={styles.usageLoadingText}>
+            Đang tải vật phẩm của đội...
+          </Text>
         </View>
       );
     }
@@ -507,7 +510,10 @@ export default function MissionDetailScreen({ route, navigation }) {
                     placeholder="0"
                     value={usageAmounts[item.id] || ""}
                     onChangeText={(value) => {
-                      const cleaned = String(value || "").replace(/[^0-9]/g, "");
+                      const cleaned = String(value || "").replace(
+                        /[^0-9]/g,
+                        "",
+                      );
                       const numeric = cleaned ? Number(cleaned) : 0;
                       const bounded = Math.min(numeric, maxQty);
                       setUsageAmounts((prev) => ({
