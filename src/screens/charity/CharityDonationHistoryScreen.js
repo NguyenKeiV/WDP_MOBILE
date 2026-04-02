@@ -241,6 +241,27 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 14,
   },
+  topActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginBottom: 10,
+  },
+  passwordBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  passwordBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
   inputLabel: {
     fontSize: 12,
     fontWeight: "700",
