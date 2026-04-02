@@ -71,17 +71,7 @@ export default function AccountSettingsScreen({ navigation }) {
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
-      {
-        text: "Đăng xuất",
-        style: "destructive",
-        onPress: () => {
-          logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Welcome" }],
-          });
-        },
-      },
+      { text: "Đăng xuất", style: "destructive", onPress: logout },
     ]);
   };
 
