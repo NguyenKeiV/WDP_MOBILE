@@ -104,21 +104,17 @@ export default function VolunteerListScreen({ navigation }) {
           <MaterialIcons name="chevron-right" size={22} color={C.primary} />
         </TouchableOpacity>
 
-        <View style={styles.notice}>
-          <MaterialIcons name="info-outline" size={18} color={C.primary} />
-          <Text style={styles.noticeText}>
-            Đăng ký được lưu trên server. Trạng thái duyệt / phản hồi điều phối sẽ
-            cập nhật khi hệ thống xử lý.
-          </Text>
-        </View>
-
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={C.primary} />
           </View>
         ) : items.length === 0 ? (
           <View style={styles.empty}>
-            <MaterialIcons name="volunteer-activism" size={56} color="#cbd5e1" />
+            <MaterialIcons
+              name="volunteer-activism"
+              size={56}
+              color="#cbd5e1"
+            />
             <Text style={styles.emptyTitle}>Chưa có đăng ký nào</Text>
             <Text style={styles.emptySub}>
               Bấm nút bên dưới để tạo đăng ký tình nguyện tham gia cứu trợ.
@@ -126,7 +122,8 @@ export default function VolunteerListScreen({ navigation }) {
           </View>
         ) : (
           items.map((item) => {
-            const st = VOLUNTEER_STATUS[item.status] || VOLUNTEER_STATUS.pending;
+            const st =
+              VOLUNTEER_STATUS[item.status] || VOLUNTEER_STATUS.pending;
             return (
               <TouchableOpacity
                 key={item.id}
